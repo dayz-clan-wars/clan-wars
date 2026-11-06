@@ -1,11 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
 import { applyGameplay } from "../src/restart-tick.js";
+import { RAID_WINDOW } from "@factions/domain";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const REAL = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
-const FRI = new Date("2026-09-18T00:00:00.000Z");
+const DAY = 86_400_000;
+// The boundaries come from RAID_WINDOW, so a retimed window moves these
+// fixtures with it instead of leaving them on a stale hour (they sat on
+// 00:00 after the window moved to 14:00 once already).
+/** The window's opening on the week of Fri 2026-09-18. */
+const FRI = new Date(Date.UTC(2026, 8, 18 - 5 + RAID_WINDOW.openDow, RAID_WINDOW.openHour));
+/** The close before it: the latest closeDow/closeHour instant before FRI. */
+const PREV_CLOSE = (() => {
+  const back = (FRI.getUTCDay() - RAID_WINDOW.closeDow + 7) % 7 || 7;
+  const d = new Date(FRI.getTime() - back * DAY);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), RAID_WINDOW.closeHour));
+})();
+/** Midweek: closed, between PREV_CLOSE and FRI. */
 const WED = new Date("2026-09-16T00:00:00.000Z");
+/** Mid-weekend: halfway through the window, so inside it whatever its hours. */
+const MID = new Date(FRI.getTime() + ((RAID_WINDOW.closeDow - RAID_WINDOW.openDow + 7) % 7 * DAY + (RAID_WINDOW.closeHour - RAID_WINDOW.openHour) * 3_600_000) / 2);
 
 function target(content = REAL) {
   return {
@@ -16,6 +31,12 @@ function target(content = REAL) {
 }
 
 describe("applyGameplay (raid window only)", () => {
+  it("fixtures sit on the window's boundaries", () => {
+    expect(FRI.toISOString()).toBe("2026-09-18T14:00:00.000Z"); // Fri 14:00 UTC today
+    expect(FRI.getUTCDay()).toBe(RAID_WINDOW.openDow);
+    expect(MID.getTime()).toBeGreaterThan(FRI.getTime());
+  });
+
   it("opens the window at the Friday boundary and uploads once", async () => {
     const t = target();
     const out = await applyGameplay(t as never, FRI, { raidWindow: { skips: [] } });
@@ -37,12 +58,12 @@ describe("applyGameplay (raid window only)", () => {
   });
 
   it("⚠️ level-triggered: repairs a hand-reverted file mid-weekend", async () => {
-    // Saturday, but someone put the file back to disabled=true.
+    // Mid-weekend, but someone put the file back to disabled=true.
     const t = target();
-    const out = await applyGameplay(t as never, new Date("2026-09-19T12:00:00.000Z"), { raidWindow: { skips: [] } });
+    const out = await applyGameplay(t as never, MID, { raidWindow: { skips: [] } });
     expect(out.flip!.changed).toBe(true);
     expect(out.flip!.wantedDisabled).toBe(false);
-    // ⚠️ The boundary is the FRIDAY, not Saturday's slot.
+    // ⚠️ The boundary is the FRIDAY opening, not this slot.
     expect(out.flip!.boundaryAt.toISOString()).toBe(FRI.toISOString());
   });
 
@@ -72,9 +93,10 @@ describe("applyGameplay (raid window only)", () => {
   it("⚠️ a midweek slot reports the close that ALREADY happened", async () => {
     const t = target();
     const out = await applyGameplay(t as never, WED, { raidWindow: { skips: [] } });
-    // Wednesday sits after Monday's close and before Friday's open. The flip that
-    // put base damage off is the PREVIOUS Monday — the coming one has not happened,
-    // so nothing could have recorded it, and the readers would find nothing.
-    expect(out.flip!.boundaryAt.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+    // Wednesday sits after the weekend's close and before Friday's open. The flip
+    // that put base damage off is the PREVIOUS close — the coming one has not
+    // happened, so nothing could have recorded it, and the readers would find nothing.
+    expect(out.flip!.boundaryAt.toISOString()).toBe(PREV_CLOSE.toISOString());
+    expect(PREV_CLOSE.toISOString()).toBe("2026-09-13T14:00:00.000Z"); // Sun 14:00 UTC today
   });
 });

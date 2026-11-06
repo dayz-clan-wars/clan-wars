@@ -1,7 +1,7 @@
 /**
  * Record a raid weekend deliberately not opened.
  *
- *   DATABASE_URL=postgres://... pnpm raid:skip --opens 2026-09-18T00:00:00Z --reason "first weekend after launch"
+ *   DATABASE_URL=postgres://... pnpm raid:skip --opens 2026-09-18T14:00:00Z --reason "first weekend after launch"
  *
  * ⚠️ A skip is a DECISION — "there is no raid weekend this week, and here is why" —
  * not a missed flip to catch up. Do not use this to compensate for a window that
@@ -9,7 +9,7 @@
  * repairs a lost write within two hours, and the scoreboard does not depend on the
  * window at all. Compensating here would just invent a second decision nobody made.
  *
- * `--opens` is REQUIRED and must be exactly a window's opening instant (midnight UTC
+ * `--opens` is REQUIRED and must be exactly a window's opening instant (`RAID_WINDOW.openHour`:00 UTC
  * on `RAID_WINDOW.openDow`) — it has no safe rounding. `raidWindowAt` matches a skip
  * by exact instant comparison (`getTime()`), so a value off by one second, or on the
  * wrong day, matches no window at all: the row sits in the database, every consumer
@@ -54,12 +54,16 @@ if (Number.isNaN(opensAt.getTime())) {
 // ⚠️ Must be EXACTLY a window's opening instant. See the header comment — an off-by-one
 // or wrong-day value matches no window and silently does nothing downstream.
 const DAY_MS = 24 * 60 * 60 * 1000;
-const midnight = new Date(Date.UTC(opensAt.getUTCFullYear(), opensAt.getUTCMonth(), opensAt.getUTCDate()));
-const back = (midnight.getUTCDay() - RAID_WINDOW.openDow + 7) % 7;
-const nearest = new Date(midnight.getTime() - back * DAY_MS);
+const openHourToday = new Date(
+  Date.UTC(opensAt.getUTCFullYear(), opensAt.getUTCMonth(), opensAt.getUTCDate(), RAID_WINDOW.openHour),
+);
+const back = (openHourToday.getUTCDay() - RAID_WINDOW.openDow + 7) % 7;
+const sameWeek = new Date(openHourToday.getTime() - back * DAY_MS);
+// Before openHour on the open day, the window that covers it opened last week.
+const nearest = sameWeek > opensAt ? new Date(sameWeek.getTime() - 7 * DAY_MS) : sameWeek;
 if (opensAt.getTime() !== nearest.getTime()) {
   usageError(
-    `--opens must be exactly a window opening instant (midnight UTC on day ${RAID_WINDOW.openDow}). ` +
+    `--opens must be exactly a window opening instant (${String(RAID_WINDOW.openHour).padStart(2, "0")}:00 UTC on day ${RAID_WINDOW.openDow}). ` +
       `Got ${opensAt.toISOString()}; the window covering it opens at ${nearest.toISOString()}.`,
   );
 }

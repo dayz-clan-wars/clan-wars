@@ -127,7 +127,7 @@ export type GameplayResult = {
  * nothing logged. That is the entire reason this function exists rather than two.
  *
  * ⚠️ Level-triggered, exactly like applyEvents. Every slot recomputes both
- * wanted values, so a bot down across Friday 00:00 opens the window LATE rather
+ * wanted values, so a bot down across Friday 14:00 opens the window LATE rather
  * than not at all, and a lost, hand-reverted or FTP-deploy-clobbered write is
  * corrected within two hours (spec §6).
  *

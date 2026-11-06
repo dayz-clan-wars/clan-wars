@@ -92,8 +92,8 @@ export const HUB_TRAP_CLASSES = ["BearTrap", "LandMineTrap", "TripwireTrap", "Im
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
-/** Fri 00:00 → Mon 00:00 UTC. Enforced by the game server's config, not here. */
-export const RAID_WINDOW = { openDow: 5, closeDow: 1 } as const;
+/** Fri 14:00 → Sun 14:00 UTC (0 = Sunday). Enforced by the game server's config, not here. */
+export const RAID_WINDOW = { openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 } as const;
 
 // Defending
 export const FLAG_DOWN_MS = 24 * HOUR;
@@ -103,9 +103,18 @@ export const DISBAND_AFTER_DORMANT_MS = 14 * DAY;
 export const DISBAND_WARNING_LEAD_MS = 4 * DAY;
 
 // The scoreboard
-export const POINTS_TOP = 200;
-export const POINTS_BOTTOM = 100;
-export const POINTS_UNRANKED = 100;
+// Raid value: a raid pays the victim clan's live value (docs/superpowers/specs/2026-11-06-raid-value-scoring-design.md §1)
+/** What a quiet, established clan is worth to raid. */
+export const RAID_VALUE_BASE = 100;
+/** Added per raid the clan just landed, fading linearly: busy clans are juicier targets. */
+export const RAID_HEAT = 50;
+export const RAID_HEAT_FADE_MS = 14 * DAY;
+/** Each hit the clan took halves its value at once, then recovers linearly, so dogpiling a victim pays less. */
+export const RAID_HIT_FADE_MS = 7 * DAY;
+/** A fresh clan is worth nothing, so farming throwaway clans pays nothing. */
+export const NEW_CLAN_WORTHLESS_MS = 7 * DAY;
+export const RAID_ONLINE_MULT = 1.5;
+export const RAID_OFFLINE_MULT = 0.75;
 export const ALPHAS_PER_WEEK = 3;
 export const POST_WIPE_BIND_MS = 7 * DAY;
 /**
@@ -461,6 +470,18 @@ export const REFERRAL_AWARD_KEY = "weapon-kit";
 /** How long the prize runs. Set here, not from the catalogue: the weapon kit's own `durationDays` is shorter, and the post promises a week. */
 export const REFERRAL_AWARD_DAYS = 7;
 
+// ─── Weekly raid award (spec 2026-11-06-raid-value-scoring §4) ───────────────
+/** The prize for the week's top raiding clan. A key in `assets/awards.json`. */
+export const RAID_AWARD_KEY = "weapon-kit";
+/** How long the prize runs. Set here, not from the catalogue, for the same reason as `REFERRAL_AWARD_DAYS`. */
+export const RAID_AWARD_DAYS = 7;
+/**
+ * The first scoring week that pays (the bridging week, closing 2026-11-08T14:00Z).
+ * ⚠️ Earlier `alpha_weeks` rows exist and must never pay: the payout was not on
+ * when they closed, and switching it on would otherwise pay every old rank 1.
+ */
+export const RAID_AWARD_FIRST_WEEK = new Date("2026-11-02T00:00:00Z");
+
 // ─── Achievements (spec 2026-10-20-achievements-150) ─────────────────────────
 
 /** Bad Dog: a dog bite counts as survived once this long passes with no death. Earned at the bite plus this, never earlier. */
@@ -468,3 +489,11 @@ export const BAD_DOG_SURVIVE_MS = 10 * MIN;
 
 /** Water Works / Community Service: steps within this of each other belong to one well. ⚠️ The observed wells keep all three steps within ~3 m; a bigger radius merges neighbouring wells into one, so one player's work would credit another's well. */
 export const WELL_RADIUS_M = 5;
+
+// ─── Scoring week (spec 2026-11-06-raid-value-scoring §3, §6) ────────────────
+
+/**
+ * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC, the close of the raid window.
+ * ⚠️ Fixed, not derived from a season or a clock: an owner decision on 2026-11-06. Moving it re-keys `raids.week_start` and `alpha_weeks.week_start` for weeks already stored.
+ */
+export const SCORING_WEEK_CUTOVER = new Date("2026-11-08T14:00:00Z");

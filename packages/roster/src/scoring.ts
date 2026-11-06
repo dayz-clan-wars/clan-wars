@@ -1,18 +1,26 @@
 import type { Database } from "@factions/db";
 import {
-  alphaWeeks, declarations, defenses, factions, players, raids, seasonResults, seasonStandings, seasons,
+  alphaWeeks, declarations, defenses, factions, membershipHistory, playerSessions, players, raids, seasonResults, seasonStandings, seasons,
 } from "@factions/db";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, or } from "drizzle-orm";
-import { weekStartOf } from "@factions/domain";
+import { and, asc, desc, eq, gt, inArray, isNull, isNotNull, lte, sql, or } from "drizzle-orm";
+import { clanValue, raidPoints, scoringWeekEnd, scoringWeekStartOf, valueReasons, type RaidFact } from "@factions/domain";
 import { activeServerId } from "./server";
 
 const DAY_MS = 86_400_000;
-const WEEK_MS = 7 * DAY_MS;
+
+/**
+ * What a raid on this clan pays right now. `payout` already carries the online multiplier, so the
+ * shown price is the paid price. The reasons are counts, never relative times: the post is edited
+ * only when its key changes, and "9h ago" would change it every pass.
+ */
+export type RaidPrice = { payout: number; online: boolean; recentRaids: number; hitsThisWeek: number; newUntil: Date | null };
 
 export type ScoreboardRow = {
   rank: number | null; tag: string; name: string; texture: string; status: string;
   points: number; raids: number; timesRaided: number; defenses: number; alpha: boolean;
+  /** Null for a dormant clan: it cannot be raided, so there is no price. */
+  price: RaidPrice | null;
 };
 export type Scoreboard = { season: { number: number; startedAt: Date; weekClosedThrough: Date | null } | null; rows: ScoreboardRow[] };
 
@@ -46,6 +54,26 @@ export async function latestAlphaFactionIds(db: Database, serverId: number): Pro
 }
 
 /**
+ * Which of these clans have a full member in session on this server at `at`, in one query.
+ * ⚠️ Twin of apps/bot/src/raid-detect.ts `clanOnlineAt` (not importable from this package): the
+ * same definition, so the price shown is the price the raid consumer will pay. Change one, change both.
+ */
+async function clansOnlineAt(db: Database, serverId: number, factionIds: number[], at: Date): Promise<Set<number>> {
+  if (factionIds.length === 0) return new Set();
+  const rows = await db.selectDistinct({ factionId: membershipHistory.factionId }).from(membershipHistory)
+    .innerJoin(playerSessions, and(eq(playerSessions.serverId, membershipHistory.serverId), eq(playerSessions.dayzId, membershipHistory.dayzId)))
+    .where(and(
+      eq(membershipHistory.serverId, serverId),
+      inArray(membershipHistory.factionId, factionIds),
+      lte(membershipHistory.joinedAt, at),
+      or(isNull(membershipHistory.leftAt), gt(membershipHistory.leftAt, at)),
+      lte(playerSessions.connectedAt, at),
+      or(isNull(playerSessions.disconnectedAt), gt(playerSessions.disconnectedAt, at)),
+    ));
+  return new Set(rows.map((r) => r.factionId));
+}
+
+/**
  * The open season's table in §8.1 order: ranked clans (rank 1..N) first,
  * then unranked (rank null) by name. Disbanded/lapsed clans are excluded.
  *
@@ -57,7 +85,7 @@ export async function latestAlphaFactionIds(db: Database, serverId: number): Pro
  * asc..." test is this function's twin: `scoring.test.ts`'s "scoreboard
  * order" test pins the identical `[A, C, B]` fixture.
  */
-export async function scoreboardDb(db: Database): Promise<Scoreboard> {
+export async function scoreboardDb(db: Database, now: Date = new Date()): Promise<Scoreboard> {
   const serverId = await activeServerId(db);
   const season = await openSeasonFor(db, serverId);
   if (!season) return { season: null, rows: [] };
@@ -82,9 +110,25 @@ export async function scoreboardDb(db: Database): Promise<Scoreboard> {
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
   const alphaIds = await latestAlphaFactionIds(db, serverId);
+
+  // Prices: this season's raid rows (twin of the bot's seasonRaidFacts) and who is in session now.
+  const facts: RaidFact[] = await db.select({
+    id: raids.id, at: raids.firstLowerAt, raiderFactionId: raids.raiderFactionId, victimFactionId: raids.victimFactionId,
+  }).from(raids).where(eq(raids.seasonId, season.id));
+  const activeIds = rows.filter((r) => r.status === "active").map((r) => r.factionId);
+  const online = await clansOnlineAt(db, serverId, activeIds, now);
+  const priceOf = (r: (typeof rows)[number]): RaidPrice | null => {
+    // ⚠️ A clan that has never activated has no price; activatedAt is null only for a non-active clan.
+    if (r.status !== "active" || !r.activatedAt) return null;
+    const clan = { id: r.factionId, activatedAt: r.activatedAt };
+    const isOnline = online.has(r.factionId);
+    return { payout: raidPoints(clanValue(clan, facts, now), isOnline), online: isOnline, ...valueReasons(clan, facts, now) };
+  };
+
   const toRow = (r: (typeof rows)[number]): ScoreboardRow => ({
     rank: rankOf.get(r.factionId) ?? null, tag: r.tag, name: r.name, texture: r.texture, status: r.status,
     points: r.points, raids: r.raids, timesRaided: r.timesRaided, defenses: r.defenses, alpha: alphaIds.has(r.factionId),
+    price: priceOf(r),
   });
 
   return {
@@ -101,7 +145,7 @@ export async function alphasDb(db: Database): Promise<{ season: { number: number
   if (!season.weekClosedThrough) return { season: { number: season.number }, weeks: [] };
 
   const weekStarts: Date[] = [];
-  for (let w = weekStartOf(season.startedAt); w.getTime() <= season.weekClosedThrough.getTime(); w = new Date(w.getTime() + WEEK_MS)) {
+  for (let w = scoringWeekStartOf(season.startedAt); w.getTime() <= season.weekClosedThrough.getTime(); w = scoringWeekEnd(w)) {
     weekStarts.push(w);
   }
 

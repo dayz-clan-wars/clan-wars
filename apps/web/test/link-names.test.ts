@@ -28,7 +28,7 @@ describe("every link names where it goes", () => {
 
 /** M10 (confirmed live): the landing scoreboard read "400 2 1" — three bare numbers. */
 describe("the landing page's scoreboard rows", () => {
-  const row: ScoreboardRow = { rank: 1, tag: "DR", name: "Dead Rabbits", texture: "Flag_Wolf", status: "active", points: 400, raids: 2, timesRaided: 1, defenses: 1, alpha: false };
+  const row: ScoreboardRow = { rank: 1, tag: "DR", name: "Dead Rabbits", texture: "Flag_Wolf", status: "active", points: 400, raids: 2, timesRaided: 1, defenses: 1, alpha: false, price: null };
   const html = renderToStaticMarkup(createElement(TopRows, { rows: [row] }));
 
   it("has a column header", () => {

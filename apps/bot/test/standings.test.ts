@@ -5,7 +5,7 @@ import {
   raids, seasonStandings,
   type Database,
 } from "@factions/db";
-import { pointsFor, weekStartOf } from "@factions/domain";
+import { clanValue, raidPoints, scoringWeekStartOf } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raidTick } from "../src/raid-tick.js";
 import { raiseTick } from "../src/raise-tick.js";
@@ -14,6 +14,11 @@ import { seedFaction, seedSeason } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-04T12:00:00Z");
+// ⚠️ BEAR and WOLF are activated past NEW_CLAN_WORTHLESS_MS so a raid on them
+// pays something; activated `now`, every raid below would score 0 and the
+// drift check would compare zeros.
+const established = new Date(now.getTime() - 30 * 86_400_000);
+const BASE_OFFLINE = raidPoints(clanValue({ id: 0, activatedAt: established }, [], now), false);
 
 describe("standings", () => {
   let db: Database;
@@ -46,9 +51,9 @@ describe("standings", () => {
     const season = await seedSeason(db, serverId, now);
     seasonId = season.id;
 
-    const bear = await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", poleKey: P1, createdAt: now, activatedAt: now });
+    const bear = await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", poleKey: P1, createdAt: established, activatedAt: established });
     BEAR = bear.id;
-    const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: P2, createdAt: now, activatedAt: now });
+    const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: P2, createdAt: established, activatedAt: established });
     WOLF = wolf.id;
 
     await db.insert(factionMembers).values([
@@ -134,7 +139,7 @@ describe("standings", () => {
     const rebuilt = await db.select().from(seasonStandings).orderBy(seasonStandings.factionId);
 
     expect(rebuilt.map(strip)).toEqual(live.map(strip));
-    expect(rebuilt.find((r) => r.factionId === WOLF)).toMatchObject({ points: 100, raids: 1, timesRaided: 1 });
+    expect(rebuilt.find((r) => r.factionId === WOLF)).toMatchObject({ points: BASE_OFFLINE, raids: 1, timesRaided: 1 });
     expect(rebuilt.find((r) => r.factionId === BEAR)).toMatchObject({ points: 0, raids: 0, timesRaided: 1, defenses: 1 });
   });
 
@@ -154,7 +159,7 @@ describe("standings", () => {
   });
 
   it("weekTopThree sums stored points per raider clan for the week, ties by §8.1, at most three, only positive", async () => {
-    const w = weekStartOf(now);
+    const w = scoringWeekStartOf(now);
     const w2 = new Date(w.getTime() + 7 * 86_400_000);
     const mk = async (tag: string) => seedFaction(db, { serverId, tag, texture: `Flag_${tag}`, poleKey: `${tag}z:0:0`, createdAt: now, activatedAt: now });
     const A = await mk("ALFA");
@@ -181,7 +186,7 @@ describe("standings", () => {
     expect(top.map((t) => t.points)).toEqual([300, 200, 200]);
   });
 
-  it("raid-tick's rank comes from rankedStandings (N=10, r=4 → 167 still holds)", async () => {
+  it("raid-tick prices by value, not rank: a ladder of standings does not move the price, though the rank is still recorded", async () => {
     const points = [1000, 900, 800, 600, 500, 400, 300, 200, 100];
     for (let i = 0; i < points.length; i++) {
       const c = await seedFaction(db, { serverId, tag: `C${i}`, texture: `Flag_C${i}`, poleKey: `c${i}:0:0`, createdAt: now, activatedAt: now });
@@ -192,7 +197,7 @@ describe("standings", () => {
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await raidTick(db);
     const [raid] = await db.select().from(raids).where(eq(raids.victimFactionId, BEAR));
-    expect(raid).toMatchObject({ points: 167, victimRankAtLower: 4, rankedCountAtLower: 10 });
-    expect(pointsFor(4, 10)).toBe(167);
+    expect(raid).toMatchObject({ points: BASE_OFFLINE, victimRankAtLower: 4, rankedCountAtLower: 10 });
+    // ⚠️ Recorded for giant_killer only; the price above is the same at any rank.
   });
 });

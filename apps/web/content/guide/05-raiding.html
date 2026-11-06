@@ -1,6 +1,19 @@
-<div class="rule"><p><strong>A player who is not on a clan's roster lowers that clan's flag at the clan's declared base.</strong> That is a raid. No breach, no damage, no kill required.</p></div>
+<div class="rule"><p><strong>A player who is not on a clan's roster lowers that clan's flag at the clan's declared base.</strong> That is a raid. No breach, no damage, no kill required. A clan's <em>own</em> flag, raised by one of that clan's members, counts <strong>anywhere on the map</strong>, not only at the base. A white flag, or a flag no member of that clan raised, is just upkeep — see <a href="#flags-anywhere">Flags anywhere</a>.</p></div>
 
-<div class="log"><span class="t">What the server can see</span><p>The log records who lowered which flag at which pole, and nothing about walls, explosives or loot. The flag is the only raid signal there is, so the flag is the raid.</p></div>
+<div class="log"><span class="t">What the server can see</span><p>The log records who lowered which flag at which pole, who raised it, and who was logged in at the time — and nothing about walls, explosives or loot. The flag is the only raid signal there is, so the flag is the raid.</p></div>
+
+<h2>What a raid pays</h2>
+<div class="rule"><p><strong>Every clan has a price, and a raid pays the price of the clan you hit</strong>, as it stands at the moment the flag comes down. The price moves, so <em>who</em> you raid is a choice.</p></div>
+<ul>
+<li>An established clan starts at <strong>{{RAID_VALUE_BASE|n}}</strong>.</li>
+<li>🔥 <strong>Heat.</strong> Each raid a clan lands adds <strong>+{{RAID_HEAT|n}}</strong> to its own price, fading to nothing over {{RAID_HEAT_FADE_MS|days}}. A clan out raiding is a clan worth hitting.</li>
+<li>🩹 <strong>Hits.</strong> Each time a clan is raided, its price <strong>halves</strong>, then recovers in a straight line over {{RAID_HIT_FADE_MS|days}}. Hit a clan that has just been hit and it pays less.</li>
+<li>🐣 <strong>New clans.</strong> A clan is worth <strong>0</strong> for its first {{NEW_CLAN_WORTHLESS_MS|days}} after it activates. Raiding one pays nothing, but it still counts as a raid you landed, so it still raises <em>your</em> price.</li>
+<li>🟢 <strong>Online or not.</strong> If anyone from the victim clan is logged in to the server when the flag comes down, the raid pays <strong>{{RAID_ONLINE_MULT}}</strong>. If nobody is, it pays <strong>{{RAID_OFFLINE_MULT}}</strong>. Anywhere on the map counts as online; it does not matter how close they are to the base. Only full members count, as of that moment.</li>
+</ul>
+<p>The online multiplier changes the points a raid pays, not the clan's price. Heat and hits are the same either way.</p>
+<p><strong>Points are yours to keep.</strong> Being raided never takes points away; it only lowers your price for a while. Every raid a clan lands counts toward its heat, even one that pays 0. A solo raider's raid is not a hit, because no clan scored. A repeat lower inside {{RAID_DEDUP_MS|hours}} adds neither heat nor a hit.</p>
+<p><a href="/guide/the-scoreboard">The scoreboard</a> shows what a raid on every clan pays right now.</p>
 
 <h2>Credit</h2>
 <ul>
@@ -8,15 +21,26 @@
 <li>If the raider is a <strong>solo</strong>, the raid is real and announced, and the victim's 24-hour clock starts — but nobody scores. There is no clan to credit.</li>
 <li><strong>A clan scores at most once against the same victim in any {{RAID_DEDUP_MS|hours}}</strong>, starting from the first time the flag is lowered. Lower it five times in a night and it is one raid. A different clan lowering it is a different raid.</li>
 <li>Lowering your <strong>own</strong> clan's flag is upkeep, not a raid.</li>
-<li>Lowering a flag at an <strong>undeclared</strong> pole is nothing. There is no clan there to raid.</li>
+<li>Lowering a flag at an <strong>undeclared</strong> pole is nothing, unless a clan member raised it and it is their clan's own flag — see <a href="#flags-anywhere">Flags anywhere</a>.</li>
 <li>A <strong>dormant</strong> clan's flag is already down, so it cannot be raided for points. A <strong>reserved</strong> clan has not activated yet and has nothing at stake.</li>
 </ul>
+
+<h2 id="flags-anywhere">Flags anywhere</h2>
+<div class="rule"><p><strong>If a clan member raised a clan's own flag, any player outside that clan who lowers it scores a raid on that clan — wherever the pole is.</strong></p></div>
+<ul>
+<li>Move your base and leave the old flag flying, and it is still your flag. Anyone outside your clan can bring it down for a raid, base or not.</li>
+<li>It has to be <strong>your clan's own flag</strong>, raised by a <strong>full member of your clan at the time</strong>. A white flag does not count. Neither does another clan's flag that one of your members happened to raise. A member who has since left still counts as having raised it for you.</li>
+<li>It scores, repeats and counts for heat and hits exactly like any other raid, with the same {{RAID_DEDUP_MS|hours}} rule.</li>
+<li>A raid away from your base <strong>does not start your {{FLAG_DOWN_MS|hours}} clock</strong> and does not cost you your crate. It is not your base, so it cannot send you dormant. Your clan gets a notice that a flag of yours away from base came down. <code>#war-log</code> announces it like any raid, and does not say whether it was a base or a stray flag.</li>
+<li><strong>X's flag on your base.</strong> If another clan, X, raised its own flag on <em>your</em> declared pole and you lower it, that is a raid on X, by you. Lowering your own flag, a white flag or a flag no clan member raised is still upkeep. If a third clan lowers X's flag on your base, it is a raid on <em>you</em> by them, and nothing on X: one lowering is never two raids.</li>
+</ul>
+<div class="log"><span class="t">What the server can see</span><p>Every flag raise records who raised it, which flag it was and which pole. A lowering is matched to the most recent raise of the same flag at the same pole, and the raiser is checked against the roster as it was at that moment.</p></div>
 
 <h2>Why lowering is enough</h2>
 <p>Because it is the only thing the server sees, and because it makes <em>where you put your pole</em> a real decision. Bury the flag deep in the compound or lose it to one player with good timing. Sneaking counts. Infiltration counts. Slipping through an open gate counts. If you do not like that, build a better base.</p>
 
 <h2>When you can raid</h2>
-<p>Base damage is switched on by the server only during the <strong>raid window: Friday 00:00 UTC to Monday 00:00 UTC</strong>. Outside it, walls do not take damage — but boosting in, open gates and lowered flags are all legal all week, and all count for points. See <a href="/guide/fair-play">Fair play</a> for what a legal boost raid may and may not do.</p>
+<p>Base damage is switched on by the server only during the <strong>raid window: {{RAID_WINDOW}}</strong>. The scoring week closes at the same moment. Outside the window, walls do not take damage — but boosting in, open gates and lowered flags are all legal all week, and all count for points. See <a href="/guide/fair-play">Fair play</a> for what a legal boost raid may and may not do.</p>
 
 <h2>The announcement</h2>
 <div class="post"><span class="ch">#war-log</span>⚔️ <strong>Wolf Clan</strong> raided <strong>The Nest</strong> — flag lowered by SubatomicRacer</div>

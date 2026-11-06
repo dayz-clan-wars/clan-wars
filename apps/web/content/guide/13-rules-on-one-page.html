@@ -21,10 +21,12 @@
 <li>A solo declaration lapses after {{SOLO_LAPSE_MS|days}} without a raise by the declarant.</li>
 </ul>
 <h2>Raiding</h2><ul>
-<li>A raid is a non-member lowering a clan's flag at its declared base.</li>
+<li>A raid is a non-member lowering a clan's flag at its declared base, or lowering a clan's own flag that one of its members raised anywhere else. Lowering another clan's own flag on your base is a raid on that clan, but only if one of that clan's members raised it. A white flag, your own flag, or a flag no member of that clan raised is upkeep.</li>
+<li>A raid pays the price of the clan you hit: {{RAID_VALUE_BASE|n}} to start, +{{RAID_HEAT|n}} for each raid they land (fading over {{RAID_HEAT_FADE_MS|days}}), halved by each hit they take (recovering over {{RAID_HIT_FADE_MS|days}}), 0 for their first {{NEW_CLAN_WORTHLESS_MS|days}}.</li>
+<li>{{RAID_ONLINE_MULT}} if anyone from the victim clan is online, {{RAID_OFFLINE_MULT}} if nobody is.</li>
 <li>A clan scores at most once against the same victim in any {{RAID_DEDUP_MS|hours}}.</li>
 <li>Solo raiders are announced but score nothing.</li>
-<li>Base damage is on Friday 00:00 UTC to Monday 00:00 UTC. Boosting in and lowering flags is legal all week.</li>
+<li>Base damage is on {{RAID_WINDOW}}. Boosting in and lowering flags is legal all week.</li>
 <li>Announcements name clans and players, never places.</li>
 </ul>
 <h2>Defending</h2><ul>
@@ -36,8 +38,8 @@
 <li>Only a member's raise counts. Getting raided never costs your name, tag or flag.</li>
 </ul>
 <h2>The scoreboard</h2><ul>
-<li>Only raids score: 200 on #1, 100 on the bottom or an unranked clan, sliding between. Dormant clans cannot be raided.</li>
-<li>Week: Monday 00:00 UTC to Monday 00:00 UTC. Top three that week are Alphas.</li>
+<li>Only raids score, and points are banked: being raided never takes any away. Dormant clans cannot be raided. The scoreboard shows what a raid on each clan pays right now.</li>
+<li>Week: {{ALPHA_WEEK}}. Top three that week are Alphas, and the top clan's leader gets a weapon kit for {{RAID_AWARD_DAYS|n}} days.</li>
 <li>Season: wipe to wipe. Champion recorded forever; points reset; clans do not. A wipe keeps your base's spot: your kit spawns there, and the first member raise of a white flag (or your own) at a pole within {{CARRIED_ADOPT_RADIUS_M|m}} of it becomes your new base.</li>
 <li>Scoreboard, directory, war log, clan pages and player profiles are public. Coordinates and positions never are.</li>
 <li>Kills are stats, never points.</li>

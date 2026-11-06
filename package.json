@@ -13,6 +13,7 @@
     "ci": "pnpm typecheck:scripts && turbo run typecheck test --concurrency=4",
     "db:migrate": "tsx scripts/migrate.ts",
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
+    "rescore:season": "tsx scripts/rescore-season.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
     "rebuild:kills": "tsx scripts/rebuild-kills.ts",
     "backfill:achievements": "tsx scripts/backfill-achievements.ts",

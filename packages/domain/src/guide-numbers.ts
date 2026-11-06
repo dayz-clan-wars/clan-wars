@@ -27,8 +27,10 @@ const SCALARS: Record<string, number> = {
   DECLARATIONS_PER_PLAYER: R.DECLARATIONS_PER_PLAYER, NEW_POLE_GRACE_MS: R.NEW_POLE_GRACE_MS, RELEASED_POLE_GRACE_MS: R.RELEASED_POLE_GRACE_MS,
   MIN_BASE_SPACING_M: R.MIN_BASE_SPACING_M, WATCH_ZONE_RADIUS_M: R.WATCH_ZONE_RADIUS_M, SOLO_LAPSE_MS: R.SOLO_LAPSE_MS, PUBLIC_BASE_DESPAWN_MS: R.PUBLIC_BASE_DESPAWN_MS,
   RAID_DEDUP_MS: R.RAID_DEDUP_MS,
+  RAID_VALUE_BASE: R.RAID_VALUE_BASE, RAID_HEAT: R.RAID_HEAT, RAID_HEAT_FADE_MS: R.RAID_HEAT_FADE_MS, RAID_HIT_FADE_MS: R.RAID_HIT_FADE_MS,
+  NEW_CLAN_WORTHLESS_MS: R.NEW_CLAN_WORTHLESS_MS, RAID_ONLINE_MULT: R.RAID_ONLINE_MULT, RAID_OFFLINE_MULT: R.RAID_OFFLINE_MULT, RAID_AWARD_DAYS: R.RAID_AWARD_DAYS,
   FLAG_DOWN_MS: R.FLAG_DOWN_MS, DORMANT_AFTER_MS: R.DORMANT_AFTER_MS, DISBAND_AFTER_DORMANT_MS: R.DISBAND_AFTER_DORMANT_MS, DISBAND_WARNING_LEAD_MS: R.DISBAND_WARNING_LEAD_MS,
-  POINTS_TOP: R.POINTS_TOP, POINTS_BOTTOM: R.POINTS_BOTTOM, POINTS_UNRANKED: R.POINTS_UNRANKED, ALPHAS_PER_WEEK: R.ALPHAS_PER_WEEK,
+  ALPHAS_PER_WEEK: R.ALPHAS_PER_WEEK,
   POST_WIPE_BIND_MS: R.POST_WIPE_BIND_MS, CARRIED_ADOPT_RADIUS_M: R.CARRIED_ADOPT_RADIUS_M, KD_MIN_KILLS: R.KD_MIN_KILLS,
   CLAN_SIZE_CAP: R.CLAN_SIZE_CAP, JOIN_PRESENCE_RADIUS_M: R.JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS: R.PENDING_EXPIRY_MS, ROSTER_COOLDOWN_MS: R.ROSTER_COOLDOWN_MS,
   LEADER_SILENT_MS: R.LEADER_SILENT_MS, SUCCESSION_WINDOW_MS: R.SUCCESSION_WINDOW_MS, VOTE_LENGTH_MS: R.VOTE_LENGTH_MS, FAILED_VOTE_COOLDOWN_MS: R.FAILED_VOTE_COOLDOWN_MS,
@@ -79,6 +81,7 @@ function duration(key: string, ms: number, f: Format): string {
 function appendixValue(key: string): string {
   const v = SCALARS[key]!;
   const unit = unitOf(key);
+  if (key.endsWith("_MULT")) return `×${v}`;   // a multiplier reads "×1.5"; `|n` gives the bare 1.5
   if (unit === "m") return `${v} m`;
   if (unit === "count") return `${v}`;
   const { n, unit: u } = durationParts(v);
@@ -119,9 +122,8 @@ const COMPOSITE: Record<string, string> = {
   FLAG_POOL: `${R.FLAG_POOL_SIZE} (white is neutral)`,
   CLAN_NAME_LENGTH: `${R.CLAN_NAME_LENGTH.min}–${R.CLAN_NAME_LENGTH.max}`,
   CLAN_TAG_LENGTH: `${R.CLAN_TAG_LENGTH.min}–${R.CLAN_TAG_LENGTH.max}`,
-  RAID_WINDOW: "Fri 00:00 → Mon 00:00 UTC",
-  POINTS: `${R.POINTS_TOP} / ${R.POINTS_BOTTOM} / ${R.POINTS_UNRANKED}`,
-  ALPHA_WEEK: "Mon 00:00 → Mon 00:00 UTC",
+  RAID_WINDOW: "Fri 14:00 → Sun 14:00 UTC",
+  ALPHA_WEEK: "Sun 14:00 → Sun 14:00 UTC",
   SEASON: "wipe to wipe",
   VOTE_THRESHOLD: `${R.VOTE_THRESHOLD.num === 2 && R.VOTE_THRESHOLD.den === 3 ? "⅔" : `${R.VOTE_THRESHOLD.num}/${R.VOTE_THRESHOLD.den}`} of all full members`,
   NAME_HOLD: "until season end",
@@ -162,10 +164,17 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Bases", "Solo declaration lapses after (no raise by declarant)", "SOLO_LAPSE_MS"),
   row("Raiding", "Same clan raiding the same victim counts once per", "RAID_DEDUP_MS"),
   row("Raiding", "Raid window (base damage on)", "RAID_WINDOW"),
+  row("Raiding", "A raid pays: an established clan's starting value", "RAID_VALUE_BASE"),
+  row("Raiding", "Added to your value by each raid you land", "RAID_HEAT"),
+  row("Raiding", "That bonus fades to nothing over", "RAID_HEAT_FADE_MS"),
+  row("Raiding", "Each time you are raided your value halves, recovering over", "RAID_HIT_FADE_MS"),
+  row("Raiding", "A clan is worth 0 for its first", "NEW_CLAN_WORTHLESS_MS"),
+  row("Raiding", "Points multiplier: someone from the clan is online", "RAID_ONLINE_MULT"),
+  row("Raiding", "Points multiplier: nobody is online", "RAID_OFFLINE_MULT"),
   row("Defending", "Flag-down clock", "FLAG_DOWN_MS"),
   row("Defending", "Inactivity → dormant", "DORMANT_AFTER_MS"),
   row("Defending", "Dormant → disbanded", "DISBAND_AFTER_DORMANT_MS"),
-  row("The scoreboard", "Points: raid on #1 / bottom / unranked", "POINTS"),
+  row("The scoreboard", "Weekly weapon kit lasts (days)", "RAID_AWARD_DAYS"),
   row("The scoreboard", "Alpha week", "ALPHA_WEEK"),
   row("The scoreboard", "Alphas per week", "ALPHAS_PER_WEEK"),
   row("The scoreboard", "Season", "SEASON"),

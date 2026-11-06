@@ -96,6 +96,7 @@ describe("/kothvote", () => {
     const ch = channel();
     const reply = await start(ctx(ch, true, at("2026-10-09T15:00:00Z")), input()); // Friday
     expect(reply.content).toMatch(/base damage is on/i);
+    expect(reply.content).toContain("Sunday 14:00 UTC");
     expect(await db.select().from(kothVotes)).toEqual([]);
     expect(ch.post).not.toHaveBeenCalled();
   });

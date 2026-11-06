@@ -2,6 +2,7 @@
 // use the identical sentences instead of a second, drifting copy of them.
 // Re-exported here so no page's import needs to change.
 export { EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "@factions/copy";
+export { PRICE_TITLE, PRICE_FOOTER, priceRow, dormantLine, priceList } from "@factions/copy";
 
 /**
  * `"3h 15m"`, hours and minutes, no seconds — the bot's rules

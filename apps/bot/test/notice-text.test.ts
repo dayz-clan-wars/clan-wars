@@ -24,6 +24,10 @@ describe("noticeText", () => {
       .toBe(`🚨 Your flag is down — lowered by [Wolfie](<${site}/players/Wolfie>) of Wolves. Re-raise within ${RAID_DEDUP_MS / 3_600_000}h or go dormant. Crate paused, spare flag still at your pole.`);
     expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Solo", raiderClan: null } }, site, dormantAfterMs))
       .toBe(`🚨 Your flag is down — lowered by [Solo](<${site}/players/Solo>). Re-raise within ${RAID_DEDUP_MS / 3_600_000}h or go dormant. Crate paused, spare flag still at your pole.`);
+    expect(noticeText({ kind: "flag_lowered_away", target: "channel", occurredAt: now, payload: { gamertag: "Wolfie", raiderClan: "Wolves" } }, site, dormantAfterMs))
+      .toBe(`🚩 Your flag away from base was lowered by [Wolfie](<${site}/players/Wolfie>) of Wolves. It counts as a raid, but it doesn't touch your base — no clock, crate unchanged.`);
+    expect(noticeText({ kind: "flag_lowered_away", target: "channel", occurredAt: now, payload: { gamertag: "Solo", raiderClan: null } }, site, dormantAfterMs))
+      .toBe(`🚩 Your flag away from base was lowered by [Solo](<${site}/players/Solo>). It counts as a raid, but it doesn't touch your base — no clock, crate unchanged.`);
     expect(noticeText({ kind: "defended", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", durationSeconds: 11700 } }, site, dormantAfterMs))
       .toBe(`🛡️ [Bear1](<${site}/players/Bear1>) raised the flag. Defended — 3h 15m under siege. Supplies resume at next restart.`);
     expect(noticeText({ kind: "non_member_raise", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site, dormantAfterMs))

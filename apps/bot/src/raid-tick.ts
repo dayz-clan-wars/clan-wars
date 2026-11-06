@@ -1,9 +1,10 @@
 import type { Database } from "@factions/db";
-import { declarations, factionMembers, factions, raids, seasonStandings } from "@factions/db";
+import { factionMembers, factions, raids, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { RAID_DEDUP_MS, pointsFor, weekStartOf } from "@factions/domain";
+import { RAID_DEDUP_MS, clanValue, raidPoints, scoringWeekStartOf } from "@factions/domain";
 import { appendWarLogTx, noticeClanTx, noticeFullMembersTx } from "@factions/roster/internal";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { classifyLower, clanOnlineAt, seasonRaidFacts } from "./raid-detect.js";
 import { openSeason } from "./season.js";
 import { rankedStandings } from "./standings.js";
 
@@ -12,8 +13,8 @@ export const RAID_CONSUMER = "raid-consumer";
 
 export type RaidTickResult = { scanned: number; raids: number; absorbed: number; skippedNoSeason: number };
 
-type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
-function readFlagPayload(payload: unknown): FlagPayload | null {
+export type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
+export function readFlagPayload(payload: unknown): FlagPayload | null {
   if (typeof payload !== "object" || payload === null) return null;
   const p = payload as Record<string, unknown>;
   if (typeof p.dayzId !== "string" || typeof p.gamertag !== "string" || typeof p.texture !== "string" || typeof p.poleKey !== "string") return null;
@@ -21,14 +22,43 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
 }
 
 /**
- * The raid consumer (spec §5.8, §7, §8.2). A `flag.lowered` at a declared
- * ACTIVE clan pole by someone who is not a full member of that clan is a
- * raid: one row per (raider clan, victim) per 24 h from the first lower;
- * later lowers inside the window update `last_lower_at`/`last_lower_event_id`/
- * `lower_count` and score nothing. Everything happens under the victim's
- * `factions` row lock, then `season_standings`, then `raids`, then the
- * war-log row and the notices — last, per §4.12.
+ * The raid consumer (spec §5.8, §7, §8.2; raid value spec 2026-11-06 §1–§2).
+ * `classifyLower` decides who a `flag.lowered` raids: an active clan at its
+ * declared base, or (away) a clan whose own flag was lowered somewhere else.
+ * One row per (raider clan, victim) per 24 h from the first lower; later
+ * lowers inside the window update `last_lower_at`/`last_lower_event_id`/
+ * `lower_count` and score nothing. A raid pays the victim's live value
+ * (`clanValue`) × the online multiplier. Everything happens under the
+ * victim's `factions` row lock, then `season_standings`, then `raids`, then
+ * the war-log row and the notices — last, per §4.12.
+ *
+ * An away raid scores, dedups, logs and counts as a hit exactly like a base
+ * raid, but never starts the flag-down clock: the pole is not the clan's
+ * base, so it must not drive the crate or dormancy.
  */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * `factions` after `raids` reads as out of §4.12 order, but no new lock is
+ * taken: the victim's row has been held FOR UPDATE since just after
+ * classification, at the top of the transaction.
+ */
+async function setFlagDown(tx: Tx, factionId: number, at: Date, byDayzId: string) {
+  await tx.update(factions).set({ flagDownSince: at, flagDownByDayzId: byDayzId }).where(eq(factions.id, factionId));
+}
+
+async function queueFlagDown(tx: Tx, serverId: number, factionId: number, at: Date, gamertag: string, raiderClan: string | null) {
+  const notice = { gamertag, raiderClan };
+  await noticeClanTx(tx, { serverId, factionId, kind: "flag_down", occurredAt: at, payload: notice });
+  await noticeFullMembersTx(tx, { serverId, factionId, kind: "flag_down", occurredAt: at, payload: notice });
+}
+
+/** The absorb path's clock start: no war-log row, since the raid it folds into was already logged. */
+async function startFlagDown(tx: Tx, serverId: number, factionId: number, at: Date, byDayzId: string, gamertag: string, raiderClan: string | null) {
+  await setFlagDown(tx, factionId, at, byDayzId);
+  await queueFlagDown(tx, serverId, factionId, at, gamertag, raiderClan);
+}
+
 export async function raidTick(db: Database, opts: { batchSize?: number; onNoSeason?: (serverId: number) => void } = {}): Promise<RaidTickResult> {
   const batchSize = opts.batchSize ?? 500;
   const out: RaidTickResult = { scanned: 0, raids: 0, absorbed: 0, skippedNoSeason: 0 };
@@ -55,15 +85,19 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           await writeCursor(tx, RAID_CONSUMER, ev.id);
           return v;
         };
-        // The victim: the ACTIVE clan whose declaration is this pole. FOR UPDATE on factions first (§4.12).
-        const [victim] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, flagDownSince: factions.flagDownSince, activatedAt: factions.activatedAt })
-          .from(factions).innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
-          .where(and(eq(factions.serverId, ev.serverId), eq(declarations.poleKey, p.poleKey), eq(factions.status, "active")))
-          .for("update", { of: factions });
+        // Classification only reads (no row locks), so it cannot take a lock
+        // out of §4.12 order; the victim's `factions` row is locked FIRST
+        // among this transaction's locks, right after.
+        const verdict = await classifyLower(tx, { serverId: ev.serverId, occurredAt: ev.occurredAt, dayzId: p.dayzId, poleKey: p.poleKey, texture: p.texture });
+        if (verdict.kind === "none") return done("no-raid" as const); // upkeep, or no clan's flag
+        const away = verdict.away;
+        // ⚠️ Re-check `active` under the lock: classification read without
+        // one, and a dormancy/disband commit in between would otherwise let a
+        // raid land on a clan that is no longer raidable.
+        const [victim] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, flagDownSince: factions.flagDownSince, activatedAt: factions.activatedAt })
+          .from(factions).where(and(eq(factions.id, verdict.victimFactionId), eq(factions.status, "active")))
+          .for("update");
         if (!victim) return done("no-raid" as const);
-        const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
-          .where(and(eq(factionMembers.factionId, victim.id), eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full")));
-        if (member) return done("no-raid" as const); // upkeep, not a raid
         const season = await openSeason(tx, ev.serverId);
         if (!season) return done("no-season" as const);
         // The raider's clan, if any (full membership on this server).
@@ -73,10 +107,16 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const raiderFactionId = raider?.factionId ?? null;
         // Dedup under the victim's lock (§8.2).
         const since = new Date(ev.occurredAt.getTime() - RAID_DEDUP_MS);
-        const [open] = await tx.select({ id: raids.id, lastLowerEventId: raids.lastLowerEventId }).from(raids).where(and(
+        const [open] = await tx.select({ id: raids.id, lastLowerEventId: raids.lastLowerEventId, away: raids.away }).from(raids).where(and(
           eq(raids.victimFactionId, victim.id), gt(raids.firstLowerAt, since),
           raiderFactionId === null ? and(isNull(raids.raiderFactionId), eq(raids.raiderDayzId, p.dayzId))! : eq(raids.raiderFactionId, raiderFactionId),
         )).orderBy(desc(raids.firstLowerAt)).limit(1);
+        // ⚠️ A base lower absorbed into an earlier AWAY raid by the same clan
+        // still has to start the flag-down clock: the away raid never did,
+        // and without this the base would sit raided with no clock, no
+        // crate pause and no flag_down notice. Base-after-base absorbs keep
+        // today's behaviour (the first lower already started the clock).
+        const startsClock = !away && victim.flagDownSince === null;
         if (open) {
           // ⚠️ `ev.id` is the true idempotency guard here, not `lastLowerAt`.
           // A redelivery of an event already folded into this raid (any
@@ -87,13 +127,30 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           // the row; an already-applied replay is a no-op.
           if (ev.id > open.lastLowerEventId) {
             await tx.update(raids).set({ lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: sql`${raids.lowerCount} + 1` }).where(eq(raids.id, open.id));
+            if (open.away && startsClock) await startFlagDown(tx, ev.serverId, victim.id, ev.occurredAt, p.dayzId, p.gamertag, raider?.name ?? null);
           }
           return done("absorbed" as const);
         }
-        // Points from the ladder at this moment (§8.1): ranked = active clans with points > 0 this season.
+        // Points (value spec §1): the victim's value just before this raid,
+        // from the season's raid rows, × the online multiplier. This row is
+        // not inserted yet, so it cannot be in its own price. ⚠️ The
+        // excludeRaidId of MAX_SAFE_INTEGER makes a same-instant earlier row
+        // count, as it does in the season rescore (which orders by id with
+        // every row present); every existing row was written before this one.
+        const online = await clanOnlineAt(tx, ev.serverId, victim.id, ev.occurredAt);
+        // ⚠️ A null activated_at cannot pass the `active` check in practice;
+        // if one ever does, treat it as activated now (worth 0), never as
+        // epoch (worth full price).
+        const valued = { id: victim.id, activatedAt: victim.activatedAt ?? ev.occurredAt };
+        const value = clanValue(valued, await seasonRaidFacts(tx, season.id), ev.occurredAt, Number.MAX_SAFE_INTEGER);
+        // Solo raids stay real, announced raids that score nothing (spec non-goal).
+        const points = raiderFactionId === null ? 0 : raidPoints(value, online);
+        // ⚠️ Rank no longer affects points, but the giant_killer achievement
+        // reads `victimRankAtLower` (victimRank === 1); null here and it can
+        // never unlock. Read BEFORE the standings upsert so the rank is the
+        // one the victim held when the flag came down. A plain select: no
+        // lock, so the documented lock order is unchanged.
         const { ranked, rankOf } = await rankedStandings(tx, season.id);
-        const rank = rankOf(victim.id);
-        const points = raiderFactionId === null ? 0 : pointsFor(rank, ranked.length);
         // Standings before raids, per §4.12's documented lock order.
         //
         // ⚠️ The two rows are upserted in `faction_id` order, not
@@ -113,23 +170,24 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         await tx.insert(raids).values({
           seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
           firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
-          points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: weekStartOf(ev.occurredAt),
+          points, victimOnline: online, away,
+          victimRankAtLower: rankOf(victim.id), rankedCountAtLower: ranked.length,
+          weekStart: scoringWeekStartOf(ev.occurredAt),
         });
-        // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
-        //
-        // `factions` after `raids` reads as out of §4.12 order, but no new
-        // lock is taken: this row has been held FOR UPDATE since the victim
-        // lookup at the top of the transaction.
-        if (victim.flagDownSince === null) {
-          await tx.update(factions).set({ flagDownSince: ev.occurredAt, flagDownByDayzId: p.dayzId }).where(eq(factions.id, victim.id));
-        }
+        // ⚠️ The war-log line is the same for base and away raids, on
+        // purpose: saying "away" would hint at where the base is not.
         const payload = { raiderClan: raider?.name ?? null, raiderTag: raider?.tag ?? null, victimClan: victim.name, victimTag: victim.tag, gamertag: p.gamertag, solo: raider === undefined, points };
-        await appendWarLogTx(tx, { serverId: ev.serverId, kind: "raid", occurredAt: ev.occurredAt, payload });
-        if (victim.flagDownSince === null) {
-          const notice = { gamertag: p.gamertag, raiderClan: raider?.name ?? null };
-          await noticeClanTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_down", occurredAt: ev.occurredAt, payload: notice });
-          await noticeFullMembersTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_down", occurredAt: ev.occurredAt, payload: notice });
+        if (away) {
+          await appendWarLogTx(tx, { serverId: ev.serverId, kind: "raid", occurredAt: ev.occurredAt, payload });
+          // Channel only, no DMs: nothing is at stake for the base, so it
+          // does not warrant waking every member the way flag_down does.
+          await noticeClanTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_lowered_away", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, raiderClan: raider?.name ?? null } });
+          return done("raid" as const);
         }
+        // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
+        if (startsClock) await setFlagDown(tx, victim.id, ev.occurredAt, p.dayzId);
+        await appendWarLogTx(tx, { serverId: ev.serverId, kind: "raid", occurredAt: ev.occurredAt, payload });
+        if (startsClock) await queueFlagDown(tx, ev.serverId, victim.id, ev.occurredAt, p.gamertag, raider?.name ?? null);
         return done("raid" as const);
       });
       if (result === "raid") out.raids++;

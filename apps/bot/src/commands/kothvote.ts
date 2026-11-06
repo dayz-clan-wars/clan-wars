@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 import { kothVotes, kothVoteVoters, servers } from "@factions/db";
 import {
-  KOTH_MIN_GAP_MS, KOTH_VOTE_MIN_POP, KOTH_VOTE_TURNOUT_MIN, chooseKothTown, kothGapOk, kothTownName, turnoutFloor,
+  KOTH_MIN_GAP_MS, KOTH_VOTE_MIN_POP, RAID_WINDOW, KOTH_VOTE_TURNOUT_MIN, chooseKothTown, kothGapOk, kothTownName, turnoutFloor,
   voteClosesAt, voteTargetSlot,
 } from "@factions/domain";
 import { and, eq } from "drizzle-orm";
@@ -12,6 +12,9 @@ import type { CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
 const UNIQUE_VIOLATION = "23505";
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+/** The window's close, stated from RAID_WINDOW so it can never drift from the rule. */
+const RAID_CLOSE = `${DAY_NAMES[RAID_WINDOW.closeDow]} ${String(RAID_WINDOW.closeHour).padStart(2, "0")}:00 UTC`;
 
 /** ⚠️ The pre-checks are plain SELECTs; a racing /kothvote reaches the INSERT. */
 export function voteConstraintReply(constraint: string): string | null {
@@ -47,7 +50,7 @@ async function start(ctx: Ctx, input: CommandInput): Promise<Reply> {
     return reply(`The ${hhmm(slot)} restart is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill.`);
   }
   if (await raidOpenAt(ctx.db, slot)) {
-    return reply("King of the Hill can't run while base damage is on. Try again after the raid window closes, Monday 00:00 UTC.");
+    return reply(`King of the Hill can't run while base damage is on. Try again after the raid window closes, ${RAID_CLOSE}.`);
   }
   // ⚠️ Refused up front: with fewer than the minimum electorate the floor can never
   // be met, and a vote that cannot pass is only a public notice that it failed.

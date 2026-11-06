@@ -900,13 +900,38 @@ export const raids = pgTable("raids", {
   /** Spec §8.1: recorded at write time, never recomputed. */
   points: integer("points").notNull(),
   victimRankAtLower: integer("victim_rank_at_lower"),
-  rankedCountAtLower: integer("ranked_count_at_lower").notNull(),
+  rankedCountAtLower: integer("ranked_count_at_lower"),
+  /** True when the victim clan had a member online at the first lower. */
+  victimOnline: boolean("victim_online").notNull().default(false),
+  /** True when the raid isn't at the victim's own declared base. */
+  away: boolean("away").notNull().default(false),
   weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
 }, (t) => ({
   uniqFirstLower: uniqueIndex("raids_first_lower_uniq").on(t.firstLowerEventId),
   byVictimOpen: index("raids_victim_recent_idx").on(t.victimFactionId, t.firstLowerAt),
   byWeek: index("raids_week_idx").on(t.seasonId, t.weekStart),
 }));
+
+/**
+ * One row per closed (season, week): the weekly raid award's ledger.
+ * Written ONLY by the weekly raid-award payout, `payRaidAwards` in
+ * `apps/bot/src/raid-award.ts` (Task 7).
+ * ⚠️ Lock order: that transaction takes `raid_award_weeks` → `award_grants` →
+ * `clan_notices`, i.e. this table immediately before `award_grants`.
+ * ⚠️ The (season_id, week_start) PK insert is the idempotency guard: deleting a
+ * row makes the payout pay that week again.
+ * A null `award_grant_id` means the week was closed but nothing was granted
+ * (e.g. the clan was disbanded; the reason is recorded in `detail.failure`).
+ */
+export const raidAwardWeeks = pgTable("raid_award_weeks", {
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  leaderDiscordId: text("leader_discord_id").notNull(),
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+  detail: jsonb("detail").notNull().default({}),
+}, (t) => ({ pk: primaryKey({ columns: [t.seasonId, t.weekStart] }) }));
 
 /** A successful defense: a member's raise that ends a flag-down clock (spec §5.8). */
 export const defenses = pgTable("defenses", {
@@ -1902,7 +1927,7 @@ export const releaseAnnouncements = pgTable("release_announcements", {
  */
 export const raidWindowFlips = pgTable("raid_window_flips", {
   serverId: integer("server_id").notNull().references(() => servers.id),
-  /** The Friday-open or Monday-close instant this flip realises. */
+  /** The window-open or window-close instant (`RAID_WINDOW`) this flip realises. */
   boundaryAt: timestamp("boundary_at", { withTimezone: true }).notNull(),
   /** What GeneralData.disableBaseDamage was set to — the FILE's value. */
   wantedDisabled: boolean("wanted_disabled").notNull(),
@@ -1928,7 +1953,7 @@ export const raidWindowFlips = pgTable("raid_window_flips", {
  * server, exactly as vehicle_wipe_announcements is.
  */
 export const raidWindowSkips = pgTable("raid_window_skips", {
-  /** The Friday 00:00 UTC instant that will not open. */
+  /** The Friday 14:00 UTC instant (`RAID_WINDOW` open) that will not open. */
   opensAt: timestamp("opens_at", { withTimezone: true }).primaryKey(),
   reason: text("reason").notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),

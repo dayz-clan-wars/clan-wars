@@ -90,57 +90,65 @@ export async function weekTopThree(db: Database | Tx, seasonId: number, weekStar
  * Returns the rebuilt row count.
  */
 export async function rebuildStandings(db: Database, seasonId: number): Promise<number> {
-  return db.transaction(async (tx) => {
-    // Lock first, per §4.12's documented order — a rebuild takes the same
-    // lock a raid/defense tick takes before it touches `season_standings`.
-    await tx.select({ id: seasonStandings.id }).from(seasonStandings)
-      .where(eq(seasonStandings.seasonId, seasonId))
-      .for("update", { of: seasonStandings });
+  return db.transaction((tx) => rebuildStandingsTx(tx, seasonId));
+}
 
-    const computed = await tx.execute(sql`
-      with raider as (
-        select raider_faction_id as faction_id, sum(points)::int as points, count(*)::int as raids
-        from raids where season_id = ${seasonId} and raider_faction_id is not null
-        group by raider_faction_id
-      ),
-      victim as (
-        select victim_faction_id as faction_id, count(*)::int as times_raided
-        from raids where season_id = ${seasonId}
-        group by victim_faction_id
-      ),
-      defense as (
-        select faction_id, count(*)::int as defenses
-        from defenses where season_id = ${seasonId}
-        group by faction_id
-      )
-      select
-        coalesce(raider.faction_id, victim.faction_id, defense.faction_id)::int as faction_id,
-        coalesce(raider.points, 0) as points,
-        coalesce(raider.raids, 0) as raids,
-        coalesce(victim.times_raided, 0) as times_raided,
-        coalesce(defense.defenses, 0) as defenses
-      from raider
-      full outer join victim on victim.faction_id = raider.faction_id
-      full outer join defense on defense.faction_id = coalesce(raider.faction_id, victim.faction_id)
-    `);
-    const rows = computed as unknown as { faction_id: number; points: number; raids: number; times_raided: number; defenses: number }[];
+/**
+ * The rebuild inside the caller's transaction: the season rescore
+ * (`rescore.ts`) rewrites raid points and must rebuild the projection in the
+ * SAME transaction, so a dry run's rollback undoes both and an apply can never
+ * commit new points beside stale standings.
+ */
+export async function rebuildStandingsTx(tx: Tx, seasonId: number): Promise<number> {
+  // Lock first, per §4.12's documented order — a rebuild takes the same
+  // lock a raid/defense tick takes before it touches `season_standings`.
+  await tx.select({ id: seasonStandings.id }).from(seasonStandings)
+    .where(eq(seasonStandings.seasonId, seasonId))
+    .for("update", { of: seasonStandings });
 
-    for (const r of rows) {
-      await tx.insert(seasonStandings).values({
-        seasonId, factionId: r.faction_id, points: r.points, raids: r.raids, timesRaided: r.times_raided, defenses: r.defenses,
-      }).onConflictDoUpdate({
-        target: [seasonStandings.seasonId, seasonStandings.factionId],
-        set: { points: r.points, raids: r.raids, timesRaided: r.times_raided, defenses: r.defenses },
-      });
-    }
+  const computed = await tx.execute(sql`
+    with raider as (
+      select raider_faction_id as faction_id, sum(points)::int as points, count(*)::int as raids
+      from raids where season_id = ${seasonId} and raider_faction_id is not null
+      group by raider_faction_id
+    ),
+    victim as (
+      select victim_faction_id as faction_id, count(*)::int as times_raided
+      from raids where season_id = ${seasonId}
+      group by victim_faction_id
+    ),
+    defense as (
+      select faction_id, count(*)::int as defenses
+      from defenses where season_id = ${seasonId}
+      group by faction_id
+    )
+    select
+      coalesce(raider.faction_id, victim.faction_id, defense.faction_id)::int as faction_id,
+      coalesce(raider.points, 0) as points,
+      coalesce(raider.raids, 0) as raids,
+      coalesce(victim.times_raided, 0) as times_raided,
+      coalesce(defense.defenses, 0) as defenses
+    from raider
+    full outer join victim on victim.faction_id = raider.faction_id
+    full outer join defense on defense.faction_id = coalesce(raider.faction_id, victim.faction_id)
+  `);
+  const rows = computed as unknown as { faction_id: number; points: number; raids: number; times_raided: number; defenses: number }[];
 
-    const keep = rows.map((r) => r.faction_id);
-    await tx.delete(seasonStandings).where(
-      keep.length > 0
-        ? and(eq(seasonStandings.seasonId, seasonId), notInArray(seasonStandings.factionId, keep))
-        : eq(seasonStandings.seasonId, seasonId),
-    );
+  for (const r of rows) {
+    await tx.insert(seasonStandings).values({
+      seasonId, factionId: r.faction_id, points: r.points, raids: r.raids, timesRaided: r.times_raided, defenses: r.defenses,
+    }).onConflictDoUpdate({
+      target: [seasonStandings.seasonId, seasonStandings.factionId],
+      set: { points: r.points, raids: r.raids, timesRaided: r.times_raided, defenses: r.defenses },
+    });
+  }
 
-    return rows.length;
-  });
+  const keep = rows.map((r) => r.faction_id);
+  await tx.delete(seasonStandings).where(
+    keep.length > 0
+      ? and(eq(seasonStandings.seasonId, seasonId), notInArray(seasonStandings.factionId, keep))
+      : eq(seasonStandings.seasonId, seasonId),
+  );
+
+  return rows.length;
 }

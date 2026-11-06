@@ -180,6 +180,8 @@ export type BotConfig = {
    * the weekly plate carrier payout (`referral-award-tick.ts`).
    */
   referralAward: { enabled: boolean; intervalMs: number };
+  /** Gates only the weekly weapon kit for the top raiding clan (`raid-award.ts`); runs on the main tick, right after the week close. */
+  raidAward: { enabled: boolean };
   /**
    * Where the raid window, the weekly vehicle wipe, bounties, King of the Hill
    * and referral payouts announce themselves. Fatal when any gated one is on and
@@ -500,6 +502,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       },
       vote: { enabled: ["1", "true"].includes((env.KOTH_VOTE ?? "").trim().toLowerCase()) },
     },
+    raidAward: { enabled: ["1", "true"].includes((env.RAID_AWARD_TICK ?? "").trim().toLowerCase()) },
     referralAward: {
       enabled: ["1", "true"].includes((env.REFERRAL_AWARD_TICK ?? "").trim().toLowerCase()),
       intervalMs: positiveInt(env, "REFERRAL_AWARD_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
@@ -601,6 +604,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // and with no channel to post it the payout would run silently forever.
   if (config.referralAward.enabled && !config.serverEventsChannelId) {
     throw new Error("REFERRAL_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly winner would never be announced.");
+  }
+  // ⚠️ Fatal, like REFERRAL_AWARD_TICK: the post is the only place the clan hears of it.
+  if (config.raidAward.enabled && !config.serverEventsChannelId) {
+    throw new Error("RAID_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly top clan would never be announced.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

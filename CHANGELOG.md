@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Every clan now has a price, and a raid pays the price of the clan you hit.** Every clan starts at 100. Each raid you land adds 50 to your price, fading over 14 days. Each time you're raided, your price halves and recovers over 7 days. A clan under a week old is worth 0, but raiding one still raises your own price. Hit a clan while someone from it is online and it pays x1.5; nobody home, x0.75. Points are banked: getting raided never takes points away.
+- **New raid window: Friday 14:00 to Sunday 14:00 UTC.** The scoring week closes at the same time. This weekend's window closes Sunday 14:00 UTC, not Monday.
+- **Season 3 was rescored** under the new rules, so this season's standings have changed.
+- **A forgotten flag counts.** If a clan member raised their clan's flag, anyone outside the clan who lowers it scores a raid on that clan, wherever the pole is. A raid away from base doesn't start the 24-hour flag clock, and the clan gets a notice. If a clan raises its own flag on your base and you lower it, that is a raid on them.
+- **The #scoreboard and the site's scoreboard show what a raid on every clan pays right now**, with a flame for recent raids, a bandage for recent hits, a chick for new clans and a green dot when someone from the clan is online.
+- The guide's Raiding, Scoreboard, Fair play and Rules on one page chapters are rewritten for all of this.
+
+### Added
+
+- **A weekly weapon kit** goes to the leader of the top-scoring clan each scoring week, for 7 days. The leader can give it to a clanmate. The first one is for the week closing this Sunday.
+
 ## [2.16.0] - 2026-11-02
 
 ### Added

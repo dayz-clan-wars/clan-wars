@@ -1,13 +1,24 @@
 <h2>Points</h2>
 <div class="rule">
-<p>A raid on the <strong>#1 clan</strong> is worth <strong>200</strong>. A raid on the <strong>bottom ranked</strong> clan is worth <strong>100</strong>. A raid on an <strong>unranked</strong> clan — active, but no points yet this season — is worth <strong>100</strong>.</p>
-<p>Clans in between are worth an in-between amount, spread evenly by rank. With ten ranked clans, hitting #4 is worth about 167.</p>
+<p><strong>A raid pays the price of the clan you hit</strong>, as it stands when the flag comes down — {{RAID_VALUE_BASE|n}} for a quiet established clan, more for one that is out raiding, less for one that was just hit, nothing for a clan under {{NEW_CLAN_WORTHLESS_MS|days}} old. Hit someone while a member is online and it pays <strong>{{RAID_ONLINE_MULT}}</strong>; nobody home, <strong>{{RAID_OFFLINE_MULT}}</strong>. The full rules are in <a href="/guide/raiding">Raiding</a>.</p>
 </div>
-<p>This is why raiding the same weak clan over and over never pays: it is always worth the minimum 100. Every point above the floor comes from going up the ladder, and everyone wants to hit the Alpha.</p>
+<p><strong>Points are banked.</strong> Once a raid pays you, those points are yours for the season. Getting raided never takes any away; it only lowers your price for a while.</p>
 <p>Your <strong>rank</strong> is your season points. If two clans tie, the one raided fewer times this season ranks higher; if still tied, the older clan does.</p>
 
+<h2>What a raid pays right now</h2>
+<p>The top of <code>#scoreboard</code> and the site's scoreboard list every active clan with the price a raid on it would pay at this moment, highest first. Beside each price:</p>
+<ul>
+<li>🔥 how many raids the clan has landed in the last {{RAID_HEAT_FADE_MS|days}}</li>
+<li>🩹 how many times it has been hit in the last {{RAID_HIT_FADE_MS|days}}</li>
+<li>🐣 for a new clan, the date it starts counting</li>
+<li>🟢 someone from the clan is online, so the price shown includes {{RAID_ONLINE_MULT}}. Without the 🟢 the price shown includes {{RAID_OFFLINE_MULT}}.</li>
+</ul>
+<p>The price on the board is the price the next raid pays. Dormant clans are listed as can't be raided.</p>
+<div class="log"><span class="t">What the server can see</span><p>Who is online comes from the same connect and disconnect log as the online board, so it is already public. The board never says where anyone is.</p></div>
+
 <h2>The week</h2>
-<p><strong>Monday 00:00 UTC to Monday 00:00 UTC</strong> — the week closes as the raid window closes. At the close, the <strong>top three by points scored that week</strong> are the <strong>Alphas</strong> until the next close (or however many clans scored, if fewer than three): a badge on the directory, the scoreboard and the clan page, an <code>@Alpha</code> role in Discord, and the week's result in <code>#war-log</code>.</p>
+<p><strong>{{ALPHA_WEEK}}</strong> — the week closes as the raid window closes. At the close, the <strong>top three by points scored that week</strong> are the <strong>Alphas</strong> until the next close (or however many clans scored, if fewer than three): a badge on the directory, the scoreboard and the clan page, an <code>@Alpha</code> role in Discord, and the week's result in <code>#war-log</code>.</p>
+<p><strong>The weekly weapon kit.</strong> The clan with the most points that week also wins a weapon kit for {{RAID_AWARD_DAYS|n}} days, granted to its <strong>leader</strong> at the close. The leader can give it to a clanmate from the site, as with any award. If no clan scored that week, there is no kit. It is announced in <code>#server-events</code>.</p>
 
 <h2>The season</h2>
 <p>A season runs from one server wipe (a full reset of the game world) to the next. At season end the <strong>champion</strong> and the full final table are recorded on the Seasons page, permanently. Every clan's placement goes on its clan page. Points reset to zero.</p>
@@ -17,7 +28,7 @@
 <li>The 7-day inactivity clock runs from the wipe. Rebuild and raise inside a week or go dormant like anyone else.</li>
 <li>Every pole on the fresh map gets the 7-day launch grace again.</li>
 <li>A clan that was dormant at season end stays dormant, and its disband clock keeps running, until a member raises a white flag at its new base.</li>
-<li>Until the first raid of the new season lands, every clan is unranked, so every raid is worth 100.</li>
+<li>Heat and hits start fresh with the season, so every established clan starts at {{RAID_VALUE_BASE|n}} again.</li>
 </ul>
 <p>The wipe date is announced in advance. It is the one thing in this guide the server owner schedules.</p>
 

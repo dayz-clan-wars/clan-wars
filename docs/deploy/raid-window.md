@@ -1,6 +1,6 @@
 # The raid window — automated flip and its manual fallback
 
-Base damage is on from **Friday 00:00 UTC** to **Monday 00:00 UTC** (guide ch. 5 and 13;
+Base damage is on from **Friday 14:00 UTC** to **Sunday 14:00 UTC** (guide ch. 5 and 13;
 `RAID_WINDOW` in `packages/domain/src/rules.ts`). Since the raid-window-automation
 increment, the bot flips it: `raid-window-tick.ts` runs beside `restart-tick.ts`, on the
 same two-hourly restart slots that already apply the truck wipe and the weekly vehicle
@@ -58,10 +58,10 @@ is the close that is unconfirmed — base damage is still ON in that case), neve
 and never `CLOSED`; a confirmed flip is what
 lets the open message go out at all. So:
 
-1. After the Friday 00:00 UTC slot, check `raid_window_flips` for an `applied` row with
+1. After the Friday 14:00 UTC slot, check `raid_window_flips` for an `applied` row with
    `restart_confirmed_at` set for that boundary.
 2. Confirm in game: a player hitting a wall with a tool takes damage on Friday, and does
-   not on Monday.
+   not on Sunday after 14:00 UTC.
 3. If the site strip or Discord never moved past "not yet confirmed" / never posted
    "live", the flip was refused or failed — see below.
 
@@ -87,9 +87,10 @@ lets the open message go out at all. So:
 | Boundary skipped | Decided | What happens instead |
 |---|---|---|
 | 2026-09-11 and 2026-09-14 (the first weekend after the 2026-09-08 launch) | 2026-09-10 | Neither flip is made. `disableBaseDamage` stays `true` all week. The first window opens **Friday 2026-09-18 00:00 UTC**, and the normal twice-weekly cadence starts from there. |
+| Weekend of 2026-11-06 closes early | 2026-11-06 | The window moved from Fri 00:00 → Mon 00:00 to Fri 14:00 → Sun 14:00 UTC the same day, mid-window. That weekend opened at Friday 00:00 as before and closed at **Sunday 2026-11-08 14:00 UTC**, 10 hours earlier than the old schedule, by owner decision. From 2026-11-13 the window is Fri 14:00 → Sun 14:00 every week. |
 
 Skips are now recorded with `pnpm raid:skip --opens <ISO> --reason "…"`, which refuses
-anything that is not exactly a window's opening instant (midnight UTC on
+anything that is not exactly a window's opening instant (`openHour`:00 UTC on
 `RAID_WINDOW.openDow`) — an off-by-one or wrong-day value would match no window and
 silently do nothing downstream. A skip is what the site strip and Discord's advance
 notice both read; they show the reason given on the command line.
@@ -99,8 +100,9 @@ not open a window on a different day to compensate. Everything else keeps its no
 clock: flag lowering scores all week, and the week tick closes week one at Monday
 2026-09-14 00:00 UTC from whatever non-destructive raids landed.
 
-⚠️ The Monday restart is **the normal case** for the week close, not a hazard (spec §14):
-the bot's week tick closes the week that ended at Monday 00:00 UTC on its next interval
+⚠️ The week close is **the normal case**, not a hazard (spec §14): the week now closes
+Sunday 14:00 UTC (after 2026-11-08; the bridging week closes 2026-11-08T14:00Z, and weeks
+before it closed Monday 00:00 UTC), and the bot's week tick closes it on its next interval
 after the boundary, from `raids` and `defenses` already committed, and a restart of the
 game server does not touch the bot. Nothing here needs to be timed against the bot.
 
@@ -118,16 +120,16 @@ first, which is what this procedure is for.
    editing. This is the only recovery path if the edit leaves the JSON invalid — a server
    that fails to parse `cfggameplay.json` fails to start, for everyone.
 3. **Edit one key only.** Under `"GeneralData"`, find `"disableBaseDamage"` and set it to
-   `false` (Friday) or `true` (Monday). Change nothing else: no reformatting, no trailing
+   `false` (Friday) or `true` (Sunday). Change nothing else: no reformatting, no trailing
    comma, no quotes around the boolean. Save.
 4. **Read it back.** Reopen the file and confirm the key shows the value you set and the
    file still parses (the panel's editor shows a JSON error if it does not; if in doubt,
    paste the content into `python3 -m json.tool` locally).
-5. **Restart the server** from the panel, at the boundary — as close to 00:00 UTC as you
+5. **Restart the server** from the panel, at the boundary — as close to 14:00 UTC as you
    can. Players online are disconnected by the restart; the guide tells them a restart sits
    on the boundary, so it is expected.
 6. **Confirm it applied.** After the server is back: on Friday, a player hitting a wall with
-   a tool sees damage; on Monday they do not. If you cannot check in game, the read-back
+   a tool sees damage; on Sunday after 14:00 UTC they do not. If you cannot check in game, the read-back
    in step 4 plus a completed restart in the panel is the evidence — record both.
 7. **The site catches up by itself**, at the next restart slot (at most two hours). The
    slot finds the file already correct, records that boundary as `applied` and confirms it
@@ -139,8 +141,8 @@ first, which is what this procedure is for.
 
 | When (UTC) | Server-local (UTC+7, `servers.clock_offset_ms = 25200000`) | Set `GeneralData.disableBaseDamage` to | Then |
 |---|---|---|---|
-| Friday 00:00 UTC | Friday 07:00 | `false` | restart the server |
-| Monday 00:00 UTC | Monday 07:00 | `true` | restart the server |
+| Friday 14:00 UTC | Friday 21:00 | `false` | restart the server |
+| Sunday 14:00 UTC | Sunday 21:00 | `true` | restart the server |
 
 ## What this never does
 

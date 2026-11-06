@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
 import { NoSeasonError, seasonForWeek } from "../story/season.js";
 import { rows, tsz } from "../story/sql.js";
-import { lastEndedWeek, WEEK_MS } from "../weeks.js";
+import { lastEndedWeek, weekWindow } from "../weeks.js";
 import { TERMINAL_STAGES } from "./store.js";
 
 /** An empty server logs nothing; after this long past week end the show goes out anyway (spec §8.1). */
@@ -16,7 +16,7 @@ async function ready(db: Database, weekStart: Date, now: Date): Promise<boolean>
     if (e instanceof NoSeasonError) return false;
     throw e;
   }
-  const weekEnd = new Date(weekStart.getTime() + WEEK_MS);
+  const weekEnd = weekWindow(weekStart).to;
   const [r] = await rows<{ closed: boolean; caught_up: boolean }>(db, sql`
     select
       coalesce((select week_closed_through >= ${tsz(weekStart)} from seasons where id = ${season.id}), false) as closed,

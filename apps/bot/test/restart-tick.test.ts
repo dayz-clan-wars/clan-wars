@@ -415,14 +415,14 @@ describe("restartTick", () => {
   const raidRows = () => db.select().from(raidWindowFlips)
     .where(eq(raidWindowFlips.serverId, serverId)).orderBy(asc(raidWindowFlips.boundaryAt));
 
-  const FRI_OPEN = at("2026-09-18T00:00:00Z");
-  const MON_CLOSE_PREV = at("2026-09-14T00:00:00Z");
-  const MON_CLOSE_NEXT = at("2026-09-21T00:00:00Z");
+  const FRI_OPEN = at("2026-09-18T14:00:00Z");
+  const MON_CLOSE_PREV = at("2026-09-13T14:00:00Z");
+  const MON_CLOSE_NEXT = at("2026-09-20T14:00:00Z");
 
   it("converges across a simulated week — missed slots and a hand-reverted file both self-heal", async () => {
     // Correctly closed already, from the prior Monday — nothing to do.
     const f = fakeRaid(cfg(true));
-    await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-13T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(f.uploads).toEqual([]);
     // ⚠️ No upload, but a row all the same: this Monday's close IS realised — the
     // file already carries it — and both readers treat a missing row as a failed
@@ -435,7 +435,7 @@ describe("restartTick", () => {
     // ⚠️ A stretch of slots (through the rest of the week) never runs — the bot
     // is down. Nothing simulates that beyond simply not calling the tick for
     // them: the next call is the whole point of level-triggered.
-    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(r1.restarted).toBe(1);
     expect(f.uploads).toHaveLength(1);
     expect(JSON.parse(f.uploads[0]!.content).GeneralData.disableBaseDamage).toBe(false);
@@ -459,7 +459,7 @@ describe("restartTick", () => {
     expect(rows[1]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false });
 
     // Monday close, several more missed slots later.
-    const r3 = await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const r3 = await restartTick(db, () => f.target, { now: at("2026-09-20T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(r3.restarted).toBe(1);
     expect(JSON.parse(f.uploads[2]!.content).GeneralData.disableBaseDamage).toBe(true);
     rows = await raidRows();
@@ -478,7 +478,7 @@ describe("restartTick", () => {
     // First pass at the boundary: the upload succeeds, the row is written
     // `applied`, then the restart POST throws — the per-server catch swallows
     // it, and nothing confirms the row.
-    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(r1.failed).toBe(1);
     let rows = await raidRows();
     expect(rows).toMatchObject([{ outcome: "applied", wantedDisabled: false }]);
@@ -489,7 +489,7 @@ describe("restartTick", () => {
     // `changed` is false this time — and the restart now succeeds. Gating the
     // confirm write on `changed` would leave the row unconfirmed forever; the
     // confirm-by-lookup must still find and confirm it.
-    const r2 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:05:00Z"), lastError, raidWindow: { enabled: true } });
+    const r2 = await restartTick(db, () => f.target, { now: at("2026-09-18T14:05:00Z"), lastError, raidWindow: { enabled: true } });
     expect(r2.restarted).toBe(1);
     expect(f.uploads).toHaveLength(1); // no second upload — it was already correct
     rows = await raidRows();
@@ -499,13 +499,13 @@ describe("restartTick", () => {
 
   it("uploads before the restart POST", async () => {
     const f = fakeRaid(cfg(true));
-    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(f.order).toEqual(["upload", "restart"]);
   });
 
   it("does not confirm when the restart POST fails, even though the upload already succeeded", async () => {
     const f = fakeRaid(cfg(true), { restartImpl: async () => { throw new Error("boom"); } });
-    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     const rows = await raidRows();
     expect(rows).toMatchObject([{ outcome: "applied" }]);
     expect(rows[0]!.restartConfirmedAt).toBeNull();
@@ -513,7 +513,7 @@ describe("restartTick", () => {
 
   it("⚠️ setWhere: a later refusal never downgrades an already-applied row", async () => {
     const f = fakeRaid(cfg(true));
-    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     let rows = await raidRows();
     expect(rows).toMatchObject([{ outcome: "applied" }]);
     const confirmedAt = rows[0]!.restartConfirmedAt;
@@ -543,7 +543,7 @@ describe("restartTick", () => {
     // The feature is switched on with disableBaseDamage already true, which is the
     // right value for the Monday close. Nothing to upload.
     const f = fakeRaid(cfg(true));
-    const r = await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const r = await restartTick(db, () => f.target, { now: at("2026-09-13T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(r.restarted).toBe(1);
     expect(f.uploads).toEqual([]);
 
@@ -555,7 +555,7 @@ describe("restartTick", () => {
     // The reader: the announcer posts the close, which it only does for a
     // confirmed flip. Before this fix it reported `skipped` here, forever.
     const announce = vi.fn(async (_c: string) => undefined);
-    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-14T00:10:00Z") });
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-13T14:10:00Z") });
     expect(out).toMatchObject({ posted: 1, skipped: 0 });
     expect(announce).toHaveBeenCalledTimes(1);
   });
@@ -566,7 +566,7 @@ describe("restartTick", () => {
     });
     // The skip kept base damage off all weekend, so the Monday close changes nothing.
     const f = fakeRaid(cfg(true));
-    await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-20T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(f.uploads).toEqual([]);
 
     const rows = await raidRows();
@@ -574,14 +574,14 @@ describe("restartTick", () => {
     expect(rows[0]!.restartConfirmedAt).not.toBeNull();
 
     const announce = vi.fn(async (_c: string) => undefined);
-    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-21T00:10:00Z") });
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-20T14:10:00Z") });
     expect(out).toMatchObject({ posted: 1, skipped: 0 });
   });
 
   it("⚠️ a no-change slot never rewrites an already-applied row, and clears a stale refusal", async () => {
     // A refusal first: the file is corrupt at the boundary slot.
     const f = fakeRaid(BROKEN_CFG);
-    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(await raidRows()).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "refused" }]);
 
     // An operator hand-fixes the file to the wanted value and the next slot finds
@@ -589,7 +589,7 @@ describe("restartTick", () => {
     // ever be cleared by a slot that happened to rewrite the file — so the website
     // would keep warning for the rest of a window that is live.
     f.setContent(cfg(false));
-    await restartTick(db, () => f.target, { now: at("2026-09-18T02:00:03Z"), lastError, raidWindow: { enabled: true } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T16:00:03Z"), lastError, raidWindow: { enabled: true } });
     let rows = await raidRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", detail: {} });
@@ -608,7 +608,7 @@ describe("restartTick", () => {
     const good = fakeRaid(cfg(true));
     const [s2] = await db.insert(servers).values({ name: "R2", map: "chernarus", clockOffsetMs: 0, nitradoServiceId: 5151, active: true }).returning();
     const r = await restartTick(db, (id) => (id === 4242 ? bad.target : good.target), {
-      now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true },
+      now: at("2026-09-18T14:00:03Z"), lastError, raidWindow: { enabled: true },
     });
     expect(r.restarted).toBe(2);
     expect(bad.restart).toHaveBeenCalledTimes(1);
@@ -628,7 +628,7 @@ describe("applyGameplay", () => {
   it("carries both edits in ONE download and ONE upload", async () => {
     const host = fakeGameplayHost();
     const presets = ["koth-hill.json", ...JSON.parse(GAMEPLAY).PlayerData.spawnGearPresetFiles as string[]];
-    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+    const out = await applyGameplay(host.target, at("2026-09-18T16:00:00Z"), {
       raidWindow: { skips: [] },
       koth: { presets },
     });
@@ -657,7 +657,7 @@ describe("applyGameplay", () => {
   it("still applies the raid flip when the KotH preset swap refuses", async () => {
     const host = fakeGameplayHost();
     // An empty preset list makes setSpawnGearPresets throw: fresh spawns would get no gear.
-    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+    const out = await applyGameplay(host.target, at("2026-09-18T16:00:00Z"), {
       raidWindow: { skips: [] }, koth: { presets: [] },
     });
     expect(out.kothError).toBeInstanceOf(Error);

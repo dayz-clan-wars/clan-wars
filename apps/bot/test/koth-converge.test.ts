@@ -299,19 +299,19 @@ describe("restartTick with KotH", () => {
   // the close is the only raid boundary a session can share a day with.
   it("a KotH opening after an applied raid boundary leaves the flip's previousContent and applied_at alone", async () => {
     const withRaid = GAMEPLAY.replace('"PlayerData"', '"GeneralData": {\n\t\t"disableBaseDamage": false\n\t},\n\t"PlayerData"');
-    const MON = at("2026-09-21T12:00:00Z");
+    const MON = at("2026-09-20T16:00:00Z");
     await schedule({ slotAt: MON });
     const m = mission({ "/m/cfggameplay.json": withRaid });
     const target = { ...m.target, status: async () => "started", restart: async () => {} } as unknown as RestartTarget;
     const opts = { lastError: new Map<number, string>(), raidWindow: { enabled: true }, koth: { open: true } };
 
-    await restartTick(db, () => target, { ...opts, now: at("2026-09-21T00:00:03Z") });
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-20T14:00:03Z") });
     const [close] = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
-    expect(close).toMatchObject({ boundaryAt: at("2026-09-21T00:00:00Z"), outcome: "applied" });
+    expect(close).toMatchObject({ boundaryAt: at("2026-09-20T14:00:00Z"), outcome: "applied" });
     expect(close!.previousContent).toBe(withRaid);
     expect(close!.appliedAt).not.toBeNull();
 
-    await restartTick(db, () => target, { ...opts, now: at("2026-09-21T12:00:03Z") });
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-20T16:00:03Z") });
     // Premise: the KotH opening really did upload cfggameplay.json this slot.
     expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
     const rows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));

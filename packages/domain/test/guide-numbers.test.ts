@@ -15,8 +15,9 @@ const LABELS = [
   "Flags in the pool", "Ceremony: linked players required", "Ceremony: window", "Claim window after ceremony", "Activation window after claim", "Clan name length", "Clan tag length",
   "Declarations per player", "New pole grace before public", "Released pole grace before public", "Public base despawns after (no flag raise)", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
   "Same clan raiding the same victim counts once per", "Raid window (base damage on)",
+  "A raid pays: an established clan's starting value", "Added to your value by each raid you land", "That bonus fades to nothing over", "Each time you are raided your value halves, recovering over", "A clan is worth 0 for its first", "Points multiplier: someone from the clan is online", "Points multiplier: nobody is online",
   "Flag-down clock", "Inactivity → dormant", "Dormant → disbanded",
-  "Points: raid on #1 / bottom / unranked", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "After a wipe: a new pole this close to your old base becomes your base", "Player board: minimum kills for K/D",
+  "Weekly weapon kit lasts (days)", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "After a wipe: a new pole this close to your old base becomes your base", "Player board: minimum kills for K/D",
   "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rebrand cooldown", "New flag: raise it within", "Old name / tag held after disband", "Base move: confirm window", "Base move: cooldown between moves", "Vault code length",
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
@@ -27,7 +28,7 @@ const LABELS = [
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 60 rows the appendix holds, in order", () => {
+  it("has the 67 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {
@@ -41,7 +42,15 @@ describe("GUIDE_NUMBERS (the appendix)", () => {
     const v = Object.fromEntries(GUIDE_NUMBERS.map((r) => [r.label, r.value]));
     expect(v["Link: time limit"]).toBe("24 h");
     expect(v["Flags in the pool"]).toBe(`${R.FLAG_POOL_SIZE} (white is neutral)`);
-    expect(v["Points: raid on #1 / bottom / unranked"]).toBe("200 / 100 / 100");
+    expect(v["Raid window (base damage on)"]).toBe("Fri 14:00 → Sun 14:00 UTC");
+    expect(v["A raid pays: an established clan's starting value"]).toBe("100");
+    expect(v["Added to your value by each raid you land"]).toBe("50");
+    expect(v["That bonus fades to nothing over"]).toBe("14 days");
+    expect(v["Each time you are raided your value halves, recovering over"]).toBe("7 days");
+    expect(v["A clan is worth 0 for its first"]).toBe("7 days");
+    expect(v["Points multiplier: someone from the clan is online"]).toBe("×1.5");
+    expect(v["Points multiplier: nobody is online"]).toBe("×0.75");
+    expect(v["Weekly weapon kit lasts (days)"]).toBe("7");
     expect(v["No-confidence vote: threshold"]).toBe("⅔ of all full members");
     expect(v["Watchtower height"]).toBe("2 (1 on a structure)");
     expect(v["Hub: combat ban"]).toBe("1 h");
@@ -52,6 +61,12 @@ describe("GUIDE_NUMBERS (the appendix)", () => {
 });
 
 describe("guideNumber (prose tokens)", () => {
+  it("a multiplier is ×1.5 bare and 1.5 with |n; the heat fade is whole days", () => {
+    expect(guideNumber("RAID_ONLINE_MULT")).toBe("×1.5");
+    expect(guideNumber("RAID_OFFLINE_MULT", "n")).toBe("0.75");
+    expect(guideNumber("RAID_HEAT_FADE_MS", "days")).toBe("14 days");
+    expect(guideNumber("RAID_AWARD_DAYS", "n")).toBe("7");
+  });
   it("formats durations in the guide's own words", () => {
     expect(guideNumber("FLAG_DOWN_MS", "hours")).toBe("24 hours");
     expect(guideNumber("FLAG_DOWN_MS", "h")).toBe("24 h");

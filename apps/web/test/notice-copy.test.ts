@@ -126,6 +126,15 @@ describe("notice copy", () => {
     expect(c.body).toContain("24 hours");
   });
 
+  it("flag_lowered_away names who lowered it, calls it a raid, and says the base is not affected", () => {
+    const c = noticeCopy("flag_lowered_away", { gamertag: "Ada", raiderClan: "Iron Wolves" });
+    expect(c.kicker).toBe("Raid");
+    expect(c.title).toBe("Your flag away from base is down");
+    expect(c.body).toBe("Lowered by Ada of Iron Wolves. It counts as a raid on your clan. It doesn't affect your base: no flag-down clock starts and your supply crate is unchanged.");
+    // A solo lowerer has no clan to name.
+    expect(noticeCopy("flag_lowered_away", { gamertag: "Ada", raiderClan: null }).body).toMatch(/^Lowered by Ada\. /u);
+  });
+
   it("states dormant_raided's window from FLAG_DOWN_MS, not a hand-typed number", () => {
     const c = noticeCopy("dormant_raided", {});
     expect(c.body).toContain("24 hours");

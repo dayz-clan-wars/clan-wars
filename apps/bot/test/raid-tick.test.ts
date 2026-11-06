@@ -2,16 +2,21 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, declarations, events, admFiles,
-  raids, seasonStandings, warLogEvents, clanNotices,
+  raids, seasons, seasonStandings, warLogEvents, clanNotices, membershipHistory, playerSessions,
   type Database,
 } from "@factions/db";
-import { POINTS_UNRANKED, weekStartOf } from "@factions/domain";
+import { RAID_DEDUP_MS, clanValue, raidPoints, scoringWeekStartOf, type RaidFact } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raidTick } from "../src/raid-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-04T12:00:00Z");
+// ⚠️ Activated well over NEW_CLAN_WORTHLESS_MS ago: a clan activated `now` is
+// worth 0, which would make every points assertion below trivially 0.
+const established = new Date(now.getTime() - 30 * 86_400_000);
+/** An established clan with no raids, offline: RAID_VALUE_BASE × RAID_OFFLINE_MULT. */
+const BASE_OFFLINE = raidPoints(clanValue({ id: 0, activatedAt: established }, [], now), false);
 
 describe("raidTick", () => {
   let db: Database;
@@ -41,14 +46,18 @@ describe("raidTick", () => {
 
     await seedSeason(db, serverId, now);
 
-    const bear = await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", poleKey: P1, createdAt: now, activatedAt: now });
+    const bear = await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", poleKey: P1, createdAt: established, activatedAt: established });
     BEAR = bear.id;
-    const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: P2, createdAt: now, activatedAt: now });
+    const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: P2, createdAt: established, activatedAt: established });
     WOLF = wolf.id;
 
     await db.insert(factionMembers).values([
       { factionId: BEAR, serverId, dayzId: B1, discordId: "dB1", role: "leader", joinedAt: now, status: "full" },
       { factionId: WOLF, serverId, dayzId: W1, discordId: "dW1", role: "leader", joinedAt: now, status: "full" },
+    ]);
+    await db.insert(membershipHistory).values([
+      { serverId, factionId: BEAR, dayzId: B1, joinedAt: established },
+      { serverId, factionId: WOLF, dayzId: W1, joinedAt: established },
     ]);
   });
 
@@ -75,15 +84,16 @@ describe("raidTick", () => {
     const [raid] = await db.select().from(raids);
     expect(raid).toMatchObject({
       victimFactionId: BEAR, raiderFactionId: WOLF, raiderDayzId: W1,
-      lowerCount: 1, points: POINTS_UNRANKED, victimRankAtLower: null, rankedCountAtLower: 0,
+      lowerCount: 1, points: BASE_OFFLINE, victimRankAtLower: null, rankedCountAtLower: 0,
+      victimOnline: false, away: false,
     });
-    expect(raid!.weekStart.toISOString()).toBe(weekStartOf(now).toISOString());
+    expect(raid!.weekStart.toISOString()).toBe(scoringWeekStartOf(now).toISOString());
     const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
     expect(bear).toEqual({ f: now, by: W1 });
     const standings = await db.select().from(seasonStandings).orderBy(seasonStandings.factionId);
-    expect(standings.map((s) => [s.factionId, s.points, s.raids, s.timesRaided])).toEqual([[BEAR, 0, 0, 1], [WOLF, POINTS_UNRANKED, 1, 0]]);
+    expect(standings.map((s) => [s.factionId, s.points, s.raids, s.timesRaided])).toEqual([[BEAR, 0, 0, 1], [WOLF, BASE_OFFLINE, 1, 0]]);
     const [log] = await db.select().from(warLogEvents);
-    expect(log).toMatchObject({ kind: "raid", payload: { raiderClan: "WOLF", victimClan: "BEAR", gamertag: "Wolfie", solo: false } });
+    expect(log).toMatchObject({ kind: "raid", payload: { raiderClan: "WOLF", victimClan: "BEAR", gamertag: "Wolfie", solo: false, points: BASE_OFFLINE } });
     const notices = await db.select({ target: clanNotices.target, kind: clanNotices.kind, to: clanNotices.discordTargetId }).from(clanNotices);
     expect(notices).toEqual(expect.arrayContaining([
       { target: "channel", kind: "flag_down", to: null },
@@ -98,24 +108,113 @@ describe("raidTick", () => {
     const r = await raidTick(db);
     expect(r).toMatchObject({ raids: 2, absorbed: 1 });
     const rows = await db.select({ raider: raids.raiderFactionId, count: raids.lowerCount, points: raids.points }).from(raids).orderBy(raids.id);
-    expect(rows).toEqual([{ raider: WOLF, count: 2, points: POINTS_UNRANKED }, { raider: null, count: 1, points: 0 }]);
+    // The solo raid follows WOLF's hit 2 h earlier, so BEAR is cheaper — but a
+    // solo raid scores 0 whatever the price.
+    expect(rows).toEqual([{ raider: WOLF, count: 2, points: BASE_OFFLINE }, { raider: null, count: 1, points: 0 }]);
     const [bear] = await db.select({ t: seasonStandings.timesRaided }).from(seasonStandings).where(eq(seasonStandings.factionId, BEAR));
     expect(bear!.t).toBe(2);
   });
 
-  it("points come from the victim's rank at the moment of the lower: N = 10, r = 4 → 167", async () => {
-    const season = await db.query.seasons.findFirst({ where: (s, { eq }) => eq(s.serverId, serverId) });
-    const points = [1000, 900, 800, 600, 500, 400, 300, 200, 100];
-    for (let i = 0; i < points.length; i++) {
-      const c = await seedFaction(db, { serverId, tag: `C${i}`, texture: `Flag_C${i}`, poleKey: `c${i}:0:0`, createdAt: now, activatedAt: now });
-      await db.insert(seasonStandings).values({ seasonId: season!.id, factionId: c.id, points: points[i]! });
-    }
-    await db.insert(seasonStandings).values({ seasonId: season!.id, factionId: BEAR, points: 700 });
+  it("points equal the value rule at the lower: heat raises it, hits lower it, the raid's own row is not in its own price", async () => {
+    const C1 = "C1-DAYZID-0000000000000000000000000";
+    const cubs = await seedFaction(db, { serverId, tag: "CUBS", texture: "Flag_Cubs", poleKey: "3000.00:100.00:3000.00", createdAt: established, activatedAt: established });
+    await db.insert(factionMembers).values({ factionId: cubs.id, serverId, dayzId: C1, discordId: "dC1", role: "leader", joinedAt: now, status: "full" });
+    const t1 = now, t2 = new Date(now.getTime() + 3 * 3_600_000), t3 = new Date(now.getTime() + 2 * 86_400_000);
+    await lower(W1, "Wolfie", "Flag_Bear", P1, t1); // WOLF raids BEAR
+    await lower(C1, "Cub", "Flag_Bear", P1, t2); // CUBS raids BEAR, now cheaper for WOLF's hit
+    await lower(C1, "Cub", "Flag_Wolf", P2, t3); // CUBS raids WOLF, dearer for WOLF's heat
+    await raidTick(db);
+    const rows = await db.select().from(raids).orderBy(raids.id);
+    expect(rows).toHaveLength(3);
+    const facts: RaidFact[] = rows.map((r) => ({ id: r.id, at: r.firstLowerAt, raiderFactionId: r.raiderFactionId, victimFactionId: r.victimFactionId }));
+    const bear = { id: BEAR, activatedAt: established };
+    const wolf = { id: WOLF, activatedAt: established };
+    // ⚠️ Each price is computed from the rows that existed BEFORE that raid:
+    // had its own row counted, raid 1 would pay half.
+    expect(rows.map((r) => r.points)).toEqual([
+      raidPoints(clanValue(bear, [], t1), false),
+      raidPoints(clanValue(bear, facts.slice(0, 1), t2), false),
+      raidPoints(clanValue(wolf, facts.slice(0, 2), t3), false),
+    ]);
+    expect(rows[0]!.points).toBe(BASE_OFFLINE);
+    expect(rows[1]!.points).toBeLessThan(BASE_OFFLINE);
+    expect(rows[2]!.points).toBeGreaterThan(BASE_OFFLINE);
+  });
 
+  it("⚠️ a raid on the #1-ranked clan records victimRankAtLower = 1 (giant_killer reads it), and the rank does not change points", async () => {
+    const [season] = await db.select({ id: seasons.id }).from(seasons);
+    await db.insert(seasonStandings).values([
+      { seasonId: season!.id, factionId: BEAR, points: 500, raids: 5 },
+      { seasonId: season!.id, factionId: WOLF, points: 100, raids: 1 },
+    ]);
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await raidTick(db);
-    const [raid] = await db.select().from(raids).where(eq(raids.victimFactionId, BEAR));
-    expect(raid).toMatchObject({ points: 167, victimRankAtLower: 4, rankedCountAtLower: 10 });
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ victimFactionId: BEAR, victimRankAtLower: 1, rankedCountAtLower: 2, points: BASE_OFFLINE });
+  });
+
+  const session = async (dayzId: string, from: Date) => {
+    const [ev] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: "player.connected", occurredAt: from, payload: { dayzId, gamertag: dayzId },
+    }).returning();
+    await db.insert(playerSessions).values({ serverId, dayzId, connectedAt: from, connectEventId: ev!.id });
+  };
+
+  it("a victim with a full member online at the lower pays ×1.5 and is recorded online", async () => {
+    await session(B1, new Date(now.getTime() - 3_600_000));
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ victimOnline: true, points: raidPoints(clanValue({ id: BEAR, activatedAt: established }, [], now), true) });
+    expect(raid!.points).toBe(Math.round(BASE_OFFLINE * 2)); // 1.5 / 0.75
+  });
+
+  it("a solo raider scores 0 but the raid still records victimOnline", async () => {
+    await session(B1, new Date(now.getTime() - 3_600_000));
+    await lower(S1, "Solo", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ raiderFactionId: null, points: 0, victimOnline: true, away: false });
+  });
+
+  const PU = "7000.00:100.00:7000.00"; // nobody's declared base
+  const raise = (dayzId: string, texture: string, poleKey: string, at: Date) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: "flag.raised", occurredAt: at,
+      payload: { dayzId, gamertag: dayzId, texture, poleKey, pole: { x: 1, y: 2, z: 3 } },
+    });
+
+  it("an away raid scores and logs like any raid, but leaves flag_down_since alone and queues flag_lowered_away, not flag_down", async () => {
+    await raise(B1, "Flag_Bear", PU, new Date(now.getTime() - 3_600_000));
+    await lower(W1, "Wolfie", "Flag_Bear", PU, now);
+    const r = await raidTick(db);
+    expect(r).toMatchObject({ raids: 1 });
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ victimFactionId: BEAR, raiderFactionId: WOLF, away: true, points: BASE_OFFLINE });
+    const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
+    expect(bear).toEqual({ f: null, by: null });
+    const [log] = await db.select().from(warLogEvents);
+    // ⚠️ Same war-log line as a base raid: saying "away" would hint where the base is NOT.
+    expect(log).toMatchObject({ kind: "raid", payload: { raiderClan: "WOLF", victimClan: "BEAR", gamertag: "Wolfie", solo: false, points: BASE_OFFLINE } });
+    expect(Object.keys(log!.payload as object).sort()).toEqual(["gamertag", "points", "raiderClan", "raiderTag", "solo", "victimClan", "victimTag"]);
+    const notices = await db.select({ target: clanNotices.target, kind: clanNotices.kind, payload: clanNotices.payload }).from(clanNotices);
+    expect(notices).toEqual([{ target: "channel", kind: "flag_lowered_away", payload: { gamertag: "Wolfie", raiderClan: "WOLF" } }]);
+  });
+
+  it("a base lower absorbed into an earlier away raid by the same clan still starts the flag-down clock", async () => {
+    await raise(B1, "Flag_Bear", PU, new Date(now.getTime() - 3_600_000));
+    await lower(W1, "Wolfie", "Flag_Bear", PU, now);
+    const later = new Date(now.getTime() + 3_600_000);
+    expect(later.getTime() - now.getTime()).toBeLessThan(RAID_DEDUP_MS);
+    await lower(W1, "Wolfie", "Flag_Bear", P1, later);
+    const r = await raidTick(db);
+    expect(r).toMatchObject({ raids: 1, absorbed: 1 });
+    const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
+    expect(bear).toEqual({ f: later, by: W1 });
+    const kinds = (await db.select({ kind: clanNotices.kind, target: clanNotices.target }).from(clanNotices)).map((n) => `${n.kind}:${n.target}`).sort();
+    expect(kinds).toEqual(["flag_down:channel", "flag_down:dm", "flag_lowered_away:channel"]);
+    // Scoring follows the ordinary dedup rule: one raid, one price.
+    expect(await db.select({ c: raids.lowerCount }).from(raids)).toEqual([{ c: 2 }]);
   });
 
   it("no raid for: a full member's lower (upkeep), a reserved clan, a dormant clan, a solo declaration, an undeclared pole", async () => {
