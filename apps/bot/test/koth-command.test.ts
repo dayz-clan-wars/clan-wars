@@ -262,18 +262,23 @@ describe("/koth", () => {
   });
 
   it("schedules a weekend slot when that raid window is skipped", async () => {
-    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T00:00:00Z"), reason: "test", decidedAt: NOW });
+    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T14:00:00Z"), reason: "test", decidedAt: NOW });
     const reply = await schedule(ctx(), input({ at: "2026-10-10T20:00:00.000Z" }));
     expect(reply.content).toMatch(/Scheduled/);
   });
 
   it("leaves raid-window slots out of the autocomplete, unless skipped", async () => {
     const pick = kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.at!;
-    const weekend = (vs: { value: string }[]) => vs.filter((v) => [0, 5, 6].includes(new Date(v.value).getUTCDay()));
+    // Fri 14:00 → Sun 14:00 UTC; Friday morning and Sunday afternoon are open to KotH.
+    const weekend = (vs: { value: string }[]) => vs.filter((v) => {
+      const d = new Date(v.value);
+      const h = d.getUTCDay() * 24 + d.getUTCHours(); // Sunday = 0..23
+      return h >= 5 * 24 + 14 || h < 14;
+    });
     // From Thursday, the next 25 slots run into Saturday.
     const thu = at("2026-10-08T12:00:00Z");
     expect(weekend(await pick(ctx(undefined, thu), { actorDiscordId: "99", value: "" }))).toEqual([]);
-    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T00:00:00Z"), reason: "test", decidedAt: NOW });
+    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T14:00:00Z"), reason: "test", decidedAt: NOW });
     expect(weekend(await pick(ctx(undefined, thu), { actorDiscordId: "99", value: "" })).length).toBeGreaterThan(0);
   });
 

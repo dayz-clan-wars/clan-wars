@@ -70,7 +70,7 @@ describe("kothDecideTick", () => {
   });
 
   it("fires on a skipped weekend", async () => {
-    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T00:00:00Z"), reason: "test", decidedAt: NOW });
+    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T14:00:00Z"), reason: "test", decidedAt: NOW });
     await online(11, "2026-10-09T18:00:00Z", null);
     expect((await run(undefined, { now: at("2026-10-09T19:30:00Z") })).decided).toBe(1);
   });

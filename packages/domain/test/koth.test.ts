@@ -155,16 +155,16 @@ describe("the calendar", () => {
 });
 
 describe("kothBlockedByRaid", () => {
-  it("blocks the first slot of the window and its last", () => {
-    expect(kothBlockedByRaid(at("2026-10-30T00:00:00Z"), [])).toBe(true); // Friday 00:00
-    expect(kothBlockedByRaid(at("2026-11-01T22:00:00Z"), [])).toBe(true); // Sunday 22:00
+  it("blocks the first slot of the window and its last (Fri 14:00 → Sun 12:00)", () => {
+    expect(kothBlockedByRaid(at("2026-10-30T14:00:00Z"), [])).toBe(true); // Friday 14:00
+    expect(kothBlockedByRaid(at("2026-11-01T12:00:00Z"), [])).toBe(true); // Sunday 12:00
   });
   it("allows the slots either side of it", () => {
-    expect(kothBlockedByRaid(at("2026-10-29T22:00:00Z"), [])).toBe(false); // Thursday 22:00
-    expect(kothBlockedByRaid(at("2026-11-02T00:00:00Z"), [])).toBe(false); // Monday 00:00
+    expect(kothBlockedByRaid(at("2026-10-30T12:00:00Z"), [])).toBe(false); // Friday 12:00
+    expect(kothBlockedByRaid(at("2026-11-01T14:00:00Z"), [])).toBe(false); // Sunday 14:00
   });
   it("allows a skipped weekend, when base damage stays off", () => {
-    expect(kothBlockedByRaid(at("2026-10-31T12:00:00Z"), [{ opensAt: at("2026-10-30T00:00:00Z"), reason: "test" }])).toBe(false);
+    expect(kothBlockedByRaid(at("2026-10-31T12:00:00Z"), [{ opensAt: at("2026-10-30T14:00:00Z"), reason: "test" }])).toBe(false);
   });
   // ⚠️ Why checking the slot's START is enough: no session straddles a window edge.
   it("agrees with the window at every instant of every slot in a week", () => {

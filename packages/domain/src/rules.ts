@@ -92,8 +92,8 @@ export const HUB_TRAP_CLASSES = ["BearTrap", "LandMineTrap", "TripwireTrap", "Im
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
-/** Fri 00:00 → Mon 00:00 UTC. Enforced by the game server's config, not here. */
-export const RAID_WINDOW = { openDow: 5, closeDow: 1 } as const;
+/** Fri 14:00 → Sun 14:00 UTC (0 = Sunday). Enforced by the game server's config, not here. */
+export const RAID_WINDOW = { openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 } as const;
 
 // Defending
 export const FLAG_DOWN_MS = 24 * HOUR;

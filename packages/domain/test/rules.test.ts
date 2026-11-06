@@ -59,7 +59,7 @@ describe("rules", () => {
     expect(R.POINTS_UNRANKED).toBe(100);
     expect(R.VOTE_THRESHOLD).toEqual({ num: 2, den: 3 });
     expect(R.HUB_POSITION).toEqual({ x: 100, z: 93 });
-    expect(R.RAID_WINDOW).toEqual({ openDow: 5, closeDow: 1 });
+    expect(R.RAID_WINDOW).toEqual({ openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 });
   });
 
   it("⚠️ keeps the released grace strictly shorter than the rebind cooldown", () => {

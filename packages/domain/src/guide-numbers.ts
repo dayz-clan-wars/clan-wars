@@ -119,7 +119,7 @@ const COMPOSITE: Record<string, string> = {
   FLAG_POOL: `${R.FLAG_POOL_SIZE} (white is neutral)`,
   CLAN_NAME_LENGTH: `${R.CLAN_NAME_LENGTH.min}–${R.CLAN_NAME_LENGTH.max}`,
   CLAN_TAG_LENGTH: `${R.CLAN_TAG_LENGTH.min}–${R.CLAN_TAG_LENGTH.max}`,
-  RAID_WINDOW: "Fri 00:00 → Mon 00:00 UTC",
+  RAID_WINDOW: "Fri 14:00 → Sun 14:00 UTC",
   POINTS: `${R.POINTS_TOP} / ${R.POINTS_BOTTOM} / ${R.POINTS_UNRANKED}`,
   ALPHA_WEEK: "Mon 00:00 → Mon 00:00 UTC",
   SEASON: "wipe to wipe",

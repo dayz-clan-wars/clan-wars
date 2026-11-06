@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { raidWindowTick } from "../src/raid-window-tick.js";
 
 const URL = requireTestDatabaseUrl();
-const FRI = new Date("2026-09-18T00:00:00.000Z");
+const FRI = new Date("2026-09-18T14:00:00.000Z");
 
 // ⚠️ id is GENERATED ALWAYS AS IDENTITY: an explicit value needs OVERRIDING SYSTEM
 // VALUE, and map/clock_offset_ms are NOT NULL with no default. Names must be distinct
@@ -73,7 +73,7 @@ describe("raidWindowTick", () => {
 
   it("posts the Thursday advance notice once", async () => {
     const post = vi.fn(async (_content: string) => undefined);
-    const thu = new Date("2026-09-17T12:00:00.000Z");
+    const thu = new Date("2026-09-17T15:00:00.000Z"); // 23 h ahead, inside ADVANCE_LEAD_MS
     const r = await raidWindowTick(db, { announce: post, ops: post }, { now: thu });
     expect(r.posted).toBe(1);
     expect(post.mock.calls[0]![0]).toMatch(/RAID WINDOW INBOUND/);
@@ -101,10 +101,10 @@ describe("raidWindowTick", () => {
   });
 
   it("⚠️ a refused CLOSE flip (wantedDisabled=true) reports 'still ON'", async () => {
-    // The unexercised case: Monday close wants disableBaseDamage=true; refused, the
+    // The unexercised case: Sunday close wants disableBaseDamage=true; refused, the
     // file stays at disableBaseDamage=false (its prior, still-open value) — still ON.
     await seedServer(db, 915);
-    const MON = new Date("2026-09-21T00:00:00.000Z");
+    const MON = new Date("2026-09-20T14:00:00.000Z");
     await db.insert(raidWindowFlips).values({
       serverId: 915, boundaryAt: MON, wantedDisabled: true,
       outcome: "refused", detail: { error: "boom" },
