@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-11-06
+
 ### Changed
 
 - The **#scoreboard** raid-price list is now a monospaced block, so clan tags and prices line up in columns. The reasons are short (🔥9, 🩹1, 🐣 and a date), and the footer spells out what each one means, now including 🐣.
