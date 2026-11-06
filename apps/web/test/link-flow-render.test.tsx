@@ -95,3 +95,16 @@ describe("referrals: naming one while linking", () => {
     expect(notice).not.toContain("—");
   });
 });
+
+describe("link-to-play gate on the open challenge", () => {
+  const withGate = (gate: unknown) => flow({ ...OPEN, challenge: { ...OPEN.challenge!, gate } } as Initial);
+  it("says the player is let back on, with a time", () => {
+    const html = withGate({ kind: "lifted", until: "2026-11-10T15:00:00.000Z" });
+    expect(html).toContain("let back on the server until 10 Nov, 15:00 UTC to finish linking.");
+  });
+  it("says today's hour is used, with when to start again", () => {
+    const html = withGate({ kind: "lift-used", nextAt: "2026-11-11T14:00:00.000Z" });
+    expect(html).toContain("You&#x27;ve had your hour back on the server for today. Start linking again after 11 Nov, 14:00 UTC to get back on.");
+  });
+  it("says nothing without a gate", () => expect(withGate(null)).not.toContain("back on the server"));
+});

@@ -34,6 +34,12 @@ export function at(d: Date): string | null {
   return s === null ? null : `<t:${s}:F>`;
 }
 
+/** `<t:…:t>` — just the time of day, in the reader's zone. For a deadline within the hour or day. */
+export function clock(d: Date): string | null {
+  const s = epoch(d);
+  return s === null ? null : `<t:${s}:t>`;
+}
+
 /** `<t:…:R>` — a live countdown. For an instant whose distance matters. */
 export function rel(d: Date): string | null {
   const s = epoch(d);

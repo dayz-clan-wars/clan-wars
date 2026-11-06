@@ -18,11 +18,11 @@ import { lapsedCopy } from "../src/index";
  * entire job is catching a mistake nobody has made yet, so the surface it
  * checks has to grow by itself.
  *
- * `at`/`rel`/`atRel` are excluded BY NAME because they are the token
+ * `at`/`rel`/`atRel`/`clock` are excluded BY NAME because they are the token
  * builders: their source necessarily contains `<t:`. That is the one
  * legitimate exception, and naming it here is what keeps it the only one.
  */
-const TOKEN_BUILDERS = new Set(["at", "rel", "atRel"]);
+const TOKEN_BUILDERS = new Set(["at", "rel", "atRel", "clock"]);
 
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);

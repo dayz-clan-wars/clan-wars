@@ -205,3 +205,14 @@ describe("the Hub rule's rendered copy", () => {
     }
   });
 });
+
+describe("link to play in the guide", () => {
+  it("states the grace and the lift from the rules, not typed numbers", () => {
+    const raw = readFileSync(join(CONTENT_DIR, "02-getting-in.html"), "utf8");
+    expect(raw).toContain("{{LINK_TO_PLAY_GRACE_MS|hours}}");
+    expect(raw).toContain("{{LINK_TO_PLAY_LIFT_MS|hours}}");
+    const html = renderFragment(raw).html;
+    expect(html).toContain("1 hour of play to link");
+    expect(html).toContain("let back on for 1 hour");
+  });
+});

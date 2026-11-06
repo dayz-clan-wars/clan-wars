@@ -17,6 +17,17 @@ export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome, endsWhen?: s
 };
 
 /**
+ * What a locked-out player is told beside their open challenge, from
+ * `LinkStatus.challenge.gate`. ⚠️ Takes the FORMATTED instant, like
+ * `held-by-other` above: the bot passes a Discord time token, the site its own
+ * `when`. Keyed to the gate's kinds, so a new kind fails the build here.
+ */
+export const GATE_COPY: Record<"lifted" | "lift-used", (time: string) => string> = {
+  "lifted": (time) => `You're let back on the server until ${time} to finish linking.`,
+  "lift-used": (time) => `You've had your hour back on the server for today. Start linking again after ${time} to get back on.`,
+};
+
+/**
  * What /link says about how the last challenge ended, from `LinkStatus.ended`.
  *
  * Keyed to `Exclude<LinkStatus["ended"], null>`, not `as const`: that closed
