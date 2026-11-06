@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Link to play.** Every gamertag that plays on Clan Wars now needs to be linked to a Discord account. You get 1 hour of play before it matters, then the gamertag is locked out until it is linked. Link at dayzclanwars.com or with `/link`. If you lose your link (by leaving the Discord or unlinking) the gamertag is locked out until you link again. Locked out? Start linking and you are back on for an hour, once a day. Finish the link and you are in for good. The site, the guide and the bot tell you where you stand.
+
 ## [2.17.2] - 2026-11-06
 
 ### Changed
