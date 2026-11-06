@@ -90,7 +90,7 @@ lets the open message go out at all. So:
 | Weekend of 2026-11-06 closes early | 2026-11-06 | The window moved from Fri 00:00 → Mon 00:00 to Fri 14:00 → Sun 14:00 UTC the same day, mid-window. That weekend opened at Friday 00:00 as before and closed at **Sunday 2026-11-08 14:00 UTC**, 10 hours earlier than the old schedule, by owner decision. From 2026-11-13 the window is Fri 14:00 → Sun 14:00 every week. |
 
 Skips are now recorded with `pnpm raid:skip --opens <ISO> --reason "…"`, which refuses
-anything that is not exactly a window's opening instant (midnight UTC on
+anything that is not exactly a window's opening instant (`openHour`:00 UTC on
 `RAID_WINDOW.openDow`) — an off-by-one or wrong-day value would match no window and
 silently do nothing downstream. A skip is what the site strip and Discord's advance
 notice both read; they show the reason given on the command line.

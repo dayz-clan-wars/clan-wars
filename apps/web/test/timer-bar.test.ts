@@ -29,7 +29,7 @@ describe("raidColumn", () => {
     expect(c.value).toBe("14h");
     expect(c.tone).toBe("live");
     expect(c.target).toBe(MON.toISOString());
-    // Friday 00:00 -> Monday 00:00 is 72h; 58h in.
+    // FRI -> MON is 72h in this fixture (not the real window length); 58h in.
     expect(c.fill).toBeCloseTo(58 / 72, 5);
   });
 
@@ -39,7 +39,7 @@ describe("raidColumn", () => {
     expect(c.value).toBe("2d 0h");
     expect(c.tone).toBe("muted");
     expect(c.target).toBe(FRI.toISOString());
-    // Mon 00:00 -> Fri 00:00 is 96h; 48h in.
+    // MON -> FRI is 96h in this fixture; 48h in.
     expect(c.fill).toBeCloseTo(0.5, 5);
   });
 

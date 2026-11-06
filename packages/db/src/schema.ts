@@ -1928,7 +1928,7 @@ export const raidWindowFlips = pgTable("raid_window_flips", {
  * server, exactly as vehicle_wipe_announcements is.
  */
 export const raidWindowSkips = pgTable("raid_window_skips", {
-  /** The Friday 00:00 UTC instant that will not open. */
+  /** The Friday 14:00 UTC instant (`RAID_WINDOW` open) that will not open. */
   opensAt: timestamp("opens_at", { withTimezone: true }).primaryKey(),
   reason: text("reason").notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),

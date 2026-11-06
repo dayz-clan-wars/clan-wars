@@ -5,7 +5,7 @@ import { baseDamageWindowDb } from "../src/base-damage-window";
 
 const URL = requireTestDatabaseUrl();
 
-const FRI = new Date("2026-09-18T00:00:00.000Z");
+const FRI = new Date("2026-09-18T14:00:00.000Z");
 
 /**
  * The site's status-strip read: is base damage actually on right now, per a
@@ -42,13 +42,13 @@ describe("baseDamageWindowDb", () => {
     });
     const w = await baseDamageWindowDb(db, FRI);
     expect(w.status).toBe("live");
-    expect(w.closesAt.toISOString()).toBe("2026-09-21T00:00:00.000Z");
+    expect(w.closesAt.toISOString()).toBe("2026-09-20T14:00:00.000Z");
   });
 
   it("⚠️ a confirmed flip from LAST weekend does not confirm this one", async () => {
     await seedServer(921, "bdw-921");
     await db.insert(raidWindowFlips).values({
-      serverId: 921, boundaryAt: new Date("2026-09-11T00:00:00.000Z"), wantedDisabled: false,
+      serverId: 921, boundaryAt: new Date("2026-09-11T14:00:00.000Z"), wantedDisabled: false,
       outcome: "applied", appliedAt: FRI, restartConfirmedAt: FRI,
     });
     const w = await baseDamageWindowDb(db, FRI);
@@ -66,7 +66,7 @@ describe("baseDamageWindowDb", () => {
     const wed = new Date("2026-09-16T00:00:00.000Z");
     await seedServer(922, "bdw-922");
     await db.insert(raidWindowFlips).values({
-      serverId: 922, boundaryAt: new Date("2026-09-14T00:00:00.000Z"), wantedDisabled: true,
+      serverId: 922, boundaryAt: new Date("2026-09-13T14:00:00.000Z"), wantedDisabled: true,
       outcome: "applied", appliedAt: wed, restartConfirmedAt: wed,
     });
     const w = await baseDamageWindowDb(db, wed);
@@ -91,18 +91,18 @@ describe("baseDamageWindowDb", () => {
    */
   it("⚠️ carries the boundary already passed, for the bar's progress fill", async () => {
     // In the window: the boundary is this window's open.
-    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
+    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T14:00:00.000Z");
 
     // Midweek: the PREVIOUS close, never the open ahead.
     const wed = new Date("2026-09-16T00:00:00.000Z");
     const w = await baseDamageWindowDb(db, wed);
-    expect(w.boundaryAt.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+    expect(w.boundaryAt.toISOString()).toBe("2026-09-13T14:00:00.000Z");
     expect(w.boundaryAt.getTime()).toBeLessThan(wed.getTime());
     expect(w.boundaryAt.getTime()).toBeLessThan(w.opensAt.getTime());
   });
 
   it("carries the boundary on a skipped weekend too", async () => {
     await db.insert(raidWindowSkips).values({ opensAt: FRI, reason: "launch weekend", decidedAt: FRI });
-    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
+    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T14:00:00.000Z");
   });
 });
