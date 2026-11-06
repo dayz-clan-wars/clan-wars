@@ -268,6 +268,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
 
   // `enabled` is frozen at write time (roster-store.ts `setSupplies`); the
   // bot's notice-text.ts says the same, so read both when you change either.
+  flag_lowered_away: { group: "Raid", render: () => ({ kicker: "Raid", title: "Flag lowered away", body: "A flag was lowered away from base." }) }, // Task 5 writes the copy
   supplies_toggled: { group: "Base", render: (p) => p.enabled === false
     ? { kicker: "Supplies", title: "Build supplies off",
         body: `${who(p.gamertag)} turned build supplies off. From the next restart, only your clan flags spawn at your pole.` }

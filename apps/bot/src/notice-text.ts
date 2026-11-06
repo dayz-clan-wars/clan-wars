@@ -223,6 +223,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   // (roster-store.ts `setSupplies`). The web's notice-copy.ts says the same;
   // read both when you change either. A payload without it names no direction
   // rather than guessing one.
+  flag_lowered_away: () => "A flag was lowered away from base.", // Task 5 writes the copy
   supplies_toggled: (p, ctx) => {
     const who = person(p.gamertag, ctx.site);
     if (p.enabled === false) return `📦 ${who} turned build supplies off. From the next restart, only your clan flags spawn at your pole.`;
