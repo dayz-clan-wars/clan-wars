@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-11-06
+
 ### Changed
 
 - **Every clan now has a price, and a raid pays the price of the clan you hit.** Every clan starts at 100. Each raid you land adds 50 to your price, fading over 14 days. Each time you're raided, your price halves and recovers over 7 days. A clan under a week old is worth 0, but raiding one still raises your own price. Hit a clan while someone from it is online and it pays x1.5; nobody home, x0.75. Points are banked: getting raided never takes points away.
