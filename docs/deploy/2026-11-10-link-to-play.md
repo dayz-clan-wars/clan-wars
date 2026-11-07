@@ -15,10 +15,11 @@ the bot restarts. Nothing here is a rehearsal except `dry`.
 
 ## 1. Release with `LINK_TO_PLAY` unset
 
-Release as usual (`release/x.y.z` changelog PR, then tag). The deploy runs migration
-**0074** (`identity_link_ends` and its trigger, `bans.nitrado_added`) automatically.
-`LINK_TO_PLAY` unset means `off`: the gate tick does not run, but `banTick` already
-removes only the entries a ban added, and the hourly guild sweep already runs.
+Release as usual (`release/x.y.z` changelog PR, then tag). The deploy runs migrations
+**0074** (`identity_link_ends` and its trigger, `bans.nitrado_added`) and **0075**
+(`bans.nitrado_attempted`) automatically. `LINK_TO_PLAY` unset means `off`: neither the
+gate tick nor the guild sweep runs. `banTick` already removes only the entries a ban added,
+and after a failed ban-list write only the names that write may have added.
 
 Merge and deploy the `nasdara` message change (branch `feat/link-to-play-message`,
 `db/messages.xml`: the first rotating message now reads "Link your gamertag at
@@ -72,6 +73,11 @@ Cross-check one gamertag from a "Would ban" post:
 
 Zero rows is correct for an unlinked player. A row means the gate is wrong.
 
+⚠️ `dry` also starts the hourly guild sweep, and the sweep is not a dry run: it removes
+linked users who left the Discord while the bot was down, for real (each one confirmed by
+a Discord member fetch first, at most 5 per pass). Its "Link sweep: removed …" posts land
+in ops beside the "Would …" lines.
+
 ## 5. Turn it on
 
 Set `LINK_TO_PLAY=on`, `sudo systemctl restart clan-wars-bot`.
@@ -79,18 +85,21 @@ Set `LINK_TO_PLAY=on`, `sudo systemctl restart clan-wars-bot`.
 Watch the first ban:
 
     begin read only;
-    select id, gamertag, status, banned_at, applied_at, nitrado_added
+    select id, gamertag, status, attempts, banned_at, applied_at, nitrado_added, nitrado_attempted
     from bans where reason = 'unlinked' order by id desc limit 10;
     rollback;
 
 It goes `pending` then `applied` within one `banTick` block (5 min), with the ban-list
-entry in `nitrado_added`. ⚠️ Spec §8: confirm the ban actually removed a connected player
+entry in `nitrado_added`. A failed Nitrado write leaves it `pending` with `attempts` up
+and the names that write may have added in `nitrado_attempted`; it retries each block and
+goes `failed` after 3 attempts, removing only those names. ⚠️ Spec §8: confirm the ban actually removed a connected player
 who was in game when it applied (they get dropped, or cannot rejoin). Record what you saw
 in `docs/deploy/2026-09-22-hub-combat.md` §9, which has the same open question.
 
 Watch the first lift: a banned player starts a link and the row goes `lift_pending`,
-then `lifted` once `banTick` removes the ban-list entry (a row that was still `pending`
-closes with nothing to remove). They have `LINK_TO_PLAY_LIFT_MS`
+then `lifted` once `banTick` removes the ban-list entry (a row still `pending` with no
+attempt yet closes with nothing to remove; one `banTick` has already tried is left until
+it applies or fails). They have `LINK_TO_PLAY_LIFT_MS`
 (1 hour) to finish linking, then the gate bans them again. A second attempt within 24 h
 does not lift again.
 
@@ -102,17 +111,31 @@ stops new `unlinked` rows but leaves open ones banned. Lift them by setting them
 
     update bans set status = 'lift_pending',
       nitrado_added = case when status = 'pending' then '{}' else nitrado_added end
-    where reason = 'unlinked' and status in ('pending', 'applied');
+    where reason = 'unlinked'
+      and (status = 'applied' or (status = 'pending' and attempts = 0));
 
-⚠️ A `pending` row has never touched Nitrado, so its `nitrado_added` is NULL, and the lift
-arm treats NULL as "remove both identifiers", which could free an entry the owner added by
-hand. Setting it to `'{}'` for pending rows makes the lift remove nothing. Do not rely on
+⚠️ A `pending` row with `attempts = 0` has never touched Nitrado, so its `nitrado_added` is
+NULL, and the lift arm treats NULL as "remove both identifiers", which could free an entry
+the owner added by hand. Setting it to `'{}'` makes the lift remove nothing. Do not rely on
 pending rows being dry-run and skipped.
 
-Run the count first inside `begin read only` with the same predicate. ⚠️ Only
+⚠️ A `pending` row with `attempts > 0` is left out on purpose: a failed write may have
+landed with its response lost, so its names may be on the list, and closing it with `'{}'`
+would leave them there forever. `banTick` keeps running with `LINK_TO_PLAY=off` (it is
+gated on `ENFORCEMENT_TICK`) and settles each such row within 3 blocks (15 min): it
+either applies (stamping what is on the list into `nitrado_added`) or goes `failed` and
+removes what it attempted. Re-run the count until none is left, then run the update once
+more to lift the rows that applied:
+
+    begin read only;
+    select count(*) from bans where reason = 'unlinked' and status = 'pending' and attempts > 0;
+    rollback;
+
+Run the update's count first inside `begin read only` with the same predicate. ⚠️ Only
 `reason = 'unlinked'`: never touch other reasons. `banTick` removes only what each ban
 added, so an entry the owner added by hand stays.
 
-The guild sweep keeps running while `off`. It removes at most 5 linked users per pass, and
-if more than 5 look missing it removes nobody and posts one ops alert per episode: read
-that as a bad member read, not as mass departure.
+The guild sweep stops with `off` too. While it runs it confirms each missing user with a
+Discord member fetch before removing them, removes at most 5 per pass, and if more than 5
+look missing it removes nobody and posts one ops alert per episode: read that as a bad
+member read, not as mass departure.
