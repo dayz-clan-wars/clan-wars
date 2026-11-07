@@ -11,7 +11,7 @@ import * as R from "../src/rules.js";
  * every row's key resolves.
  */
 const LABELS = [
-  "Link: emotes to perform", "Link: time limit",
+  "Link: emotes to perform", "Link: time limit", "Unlinked gamertag: play time before a ban", "Starting a link lifts the ban for",
   "Flags in the pool", "Ceremony: linked players required", "Ceremony: window", "Claim window after ceremony", "Activation window after claim", "Clan name length", "Clan tag length",
   "Declarations per player", "New pole grace before public", "Released pole grace before public", "Public base despawns after (no flag raise)", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
   "Same clan raiding the same victim counts once per", "Raid window (base damage on)",
@@ -28,7 +28,7 @@ const LABELS = [
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 67 rows the appendix holds, in order", () => {
+  it("has the 69 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {

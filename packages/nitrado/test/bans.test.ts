@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { NitradoClient } from "../src/client.js";
+import { NitradoClient, BanWriteError } from "../src/client.js";
 
 /**
  * Fakes the settings GET/POST pair. `posts` records every POST body so a
@@ -53,6 +53,12 @@ describe("NitradoClient.addBans", () => {
     expect(posts[0]!.value).toBe("ABC123\r\nRonald");
   });
 
+  it("returns only the names it added, not ones already on the list", async () => {
+    const { fetchFn } = fakeSettings("ABC123");
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
+    await expect(client.addBans(["ABC123", "Ronald"])).resolves.toEqual(["Ronald"]);
+  });
+
   it("issues NO post when every entry is already present", async () => {
     const { fetchFn, posts } = fakeSettings("ABC123\r\nRonald");
     const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
@@ -81,6 +87,27 @@ describe("NitradoClient.addBans", () => {
     const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
     await client.addBans(["  ", ""]);
     expect(posts).toHaveLength(0);
+  });
+});
+
+describe("NitradoClient.addBans failures", () => {
+  it("a failed READ throws BanWriteError with nothing attempted", async () => {
+    const fetchFn = vi.fn(async () => ({ ok: false, status: 503 }) as unknown as Response);
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
+    const err = await client.addBans(["ABC123", "Ronald"]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BanWriteError);
+    expect((err as BanWriteError).attempted).toEqual([]);
+  });
+
+  it("⚠️ a failed WRITE throws BanWriteError naming only the names missing at read time", async () => {
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "POST"
+      ? ({ ok: false, status: 502 }) as unknown as Response
+      : ({ ok: true, json: async () => ({ status: "success", data: { settings: { general: { bans: "ABC123" } } } }) }) as unknown as Response);
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
+    const err = await client.addBans(["ABC123", "Ronald"]).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BanWriteError);
+    expect((err as BanWriteError).attempted).toEqual(["Ronald"]);
+    expect((err as BanWriteError).message).toContain("502");
   });
 });
 

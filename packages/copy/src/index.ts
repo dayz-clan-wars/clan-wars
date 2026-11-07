@@ -2,13 +2,13 @@ export { TABLES, type Action, REFUSAL, DISBAND_WARNING } from "./clan";
 export { VAULT_TABLES, type VaultAction, VAULT_INTRO, revealedCopy, rotatedCopy } from "./vault";
 export { LEADERSHIP_TABLES, type LeadershipAction, CLAIM_REFUSAL } from "./leadership";
 export { DECLARE_COPY, RELEASE_COPY, DECLARED_OK, lapsedCopy } from "./base";
-export { ISSUE_COPY, ENDED_COPY, UNLINK_COPY, unlinkCopy, formatRemaining, REFERRAL_COPY, REFERRAL_RECORDED, REFERRER_UNNAMED } from "./link";
+export { ISSUE_COPY, ENDED_COPY, GATE_COPY, UNLINK_COPY, unlinkCopy, formatRemaining, REFERRAL_COPY, REFERRAL_RECORDED, REFERRER_UNNAMED } from "./link";
 export { PIN_RESULT_COPY, PIN_ICON_LABELS } from "./map";
 export { EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "./scoring";
 export { BOARD_LABELS, EMPTY_BOARD, ACHIEVEMENT_CLOSEST, ACHIEVEMENT_NONE, NO_PROFILE, playTime, scopeLabel, boardValue, BOARD_TOP, BOARD_SLUGS, boardKindFromSlug, REFERRERS_WEEK_NOTE, boardHeading } from "./stats";
 export { ARMORY_LABEL, armoryCount, achievementSummaryLine } from "./achievements";
 export { days, hours, when } from "./format";
-export { at, rel, atRel } from "./discord-time";
+export { at, rel, atRel, clock } from "./discord-time";
 export {
   discordCopy, discordVaultCopy, discordLeadershipCopy,
   DISCORD_OVERRIDES, DISCORD_VAULT_OVERRIDES, DISCORD_LEADERSHIP_OVERRIDES,

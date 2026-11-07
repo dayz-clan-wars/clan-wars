@@ -86,6 +86,13 @@ export type ViolationKind = (typeof VIOLATION_KINDS)[number];
  */
 export const BAN_STATUSES = ["pending", "applied", "lift_pending", "lifted", "expired", "failed"] as const;
 export type BanStatus = (typeof BAN_STATUSES)[number];
+/**
+ * Statuses that mean a ban is in force, queued, or on its way out: the set the
+ * link gate reads as "this gamertag has an active ban" and the link page reads
+ * before promising a lift. One statement, so the two cannot disagree.
+ */
+export const BAN_ACTIVE_STATUSES = ["pending", "applied", "lift_pending"] as const satisfies readonly BanStatus[];
+export type BanActiveStatus = (typeof BAN_ACTIVE_STATUSES)[number];
 /** A Nitrado error this many times moves the row to `failed`. */
 export const BAN_MAX_ATTEMPTS = 3;
 
@@ -99,7 +106,7 @@ export const BAN_MAX_ATTEMPTS = 3;
  * and deliberately says nothing specific: naming the offence can point at
  * whoever it was aimed at.
  */
-export const BAN_REASONS = ["zone", "unlinked_pc", "hub_combat", "conduct"] as const;
+export const BAN_REASONS = ["zone", "unlinked", "unlinked_pc", "hub_combat", "conduct"] as const;
 export type BanReason = (typeof BAN_REASONS)[number];
 /**
  * What a ban is FOR, in words a player reads — the ban DM and #bans both use
@@ -107,6 +114,7 @@ export type BanReason = (typeof BAN_REASONS)[number];
  */
 export const BAN_REASON_TEXT: Record<BanReason, string> = {
   zone: "base-zone enforcement",
+  unlinked: "playing without a linked account",
   unlinked_pc: "playing on PC without a linked account",
   hub_combat: "combat at the Fast Travel Hub",
   conduct: "conduct toward other players",

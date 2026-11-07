@@ -22,6 +22,18 @@ describe("banAnnouncementText", () => {
       .toBe("🔨 **Wolfie** banned — playing on PC without a linked account. Link your account to lift it.");
   });
 
+  it("applied / unlinked: the reason text, and how to end it", () => {
+    const a: BanAnnouncement = { kind: "applied", gamertag: "Newbie", reason: "unlinked", expiresAt: null };
+    expect(banAnnouncementText(a))
+      .toBe("🔨 **Newbie** banned — playing without a linked account. Link your account to lift it.");
+  });
+
+  // ⚠️ A lift to finish linking is temporary; "unbanned" would read as cleared.
+  it("lifted / unlinked: can rejoin to finish linking", () => {
+    const a: BanAnnouncement = { kind: "lifted", gamertag: "Newbie", reason: "unlinked", expiresAt: null };
+    expect(banAnnouncementText(a)).toBe("🔓 **Newbie** can rejoin to finish linking their account.");
+  });
+
   it("applied / zone / permanent", () => {
     const a: BanAnnouncement = { kind: "applied", gamertag: "Bear1", reason: "zone", expiresAt: null };
     expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned permanently — base-zone enforcement.");

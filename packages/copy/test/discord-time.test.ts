@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { at, rel, atRel } from "../src/index";
+import { at, rel, atRel, clock } from "../src/index";
 
 /**
  * ⚠️ The invalid-date cases are the reason this module exists. Before it,
@@ -35,6 +35,7 @@ describe("discord-time", () => {
     ["at", at],
     ["rel", rel],
     ["atRel", atRel],
+    ["clock", clock],
   ])("%s returns null for an invalid date", (_name, fn) => {
     expect(fn(new Date("not a date"))).toBeNull();
   });

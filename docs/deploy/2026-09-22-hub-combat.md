@@ -146,7 +146,9 @@ hour after `banned_at`. `#bans` announces it as "combat at the Fast Travel Hub".
   applies it come out of the hour.
 - Whether adding a player to Nitrado's ban list kicks them while already connected is
   not established. They are kept out when they next connect — and fast travel is a
-  relog, so a Hub offender usually reconnects within minutes.
+  relog, so a Hub offender usually reconnects within minutes. The link-to-play launch
+  (`docs/deploy/2026-11-10-link-to-play.md` §5) checks this: record here whether its
+  first ban removed a player who was connected.
 - `Plastic_Explosive` is in `HUB_TRAP_CLASSES` unobserved — it has never been placed on
   this server. Confirm the classname the first time it appears in an `item.placed`.
 - A PvE survival achievement still counts a Hub death, exactly as it counts a

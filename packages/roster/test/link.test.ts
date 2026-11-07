@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, identityLinks, players, poles, events, admFiles, verificationChallenges, challengeAttempts, declarations,
+  servers, bans, factions, factionMembers, identityLinks, players, poles, events, admFiles, verificationChallenges, challengeAttempts, declarations,
   type Database,
 } from "@factions/db";
-import { LINK_TTL_MS, LINK_EMOTES, RELEASED_POLE_GRACE_MS } from "@factions/domain";
+import { LINK_TTL_MS, LINK_EMOTES, LINK_TO_PLAY_LIFT_MS, LINK_TO_PLAY_LIFT_WINDOW_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { declareSolo } from "@factions/declarations";
 import { sql, eq } from "drizzle-orm";
 import { linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb } from "../src/link";
@@ -76,6 +76,79 @@ describe("roster link writes", () => {
     await db.insert(identityLinks).values({ discordId: "d9", dayzId: UID_A, gamertag: "Ronald", verifiedAt: now });
     expect(await searchGamertagsDb(db, "ron")).toEqual([]);
     expect(await searchGamertagsDb(db, "   ")).toEqual([]);
+  });
+
+  describe("link gate", () => {
+    const ban = (over: Partial<typeof bans.$inferInsert> = {}) => db.insert(bans).values({
+      serverId, dayzId: UID_A, gamertag: "Ronald", bannedAt: new Date(now.getTime() - 3_600_000), reason: "unlinked", status: "applied", ...over,
+    });
+    const gate = async () => { await start(); return (await linkStatusDb(db, "d1", now)).challenge!.gate; };
+    const tenMinAgo = new Date(now.getTime() - 10 * 60_000);
+
+    it("is null with no ban", async () => { expect(await gate()).toBeNull(); });
+
+    it("lifted: an unlinked ban lifted inside the hour, until lifted_at + the lift", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo });
+      expect(await gate()).toEqual({ kind: "lifted", until: new Date(tenMinAgo.getTime() + LINK_TO_PLAY_LIFT_MS) });
+    });
+
+    it("lift-used: banned again after the hour, nextAt a window after the lift", async () => {
+      const lifted = new Date(now.getTime() - 2 * 3_600_000);
+      await ban({ status: "lifted", liftedAt: lifted, bannedAt: new Date(lifted.getTime() - 3_600_000) });
+      await ban({ status: "applied" });
+      expect(await gate()).toEqual({ kind: "lift-used", nextAt: new Date(lifted.getTime() + LINK_TO_PLAY_LIFT_WINDOW_MS) });
+    });
+
+    it("will-lift: banned, applied, and no lift spent in the window", async () => {
+      await ban();
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("will-lift: a pending ban counts (it is applied, then lifted)", async () => {
+      await ban({ status: "pending" });
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("will-lift: a lift more than a window ago is no longer spent", async () => {
+      const longAgo = new Date(now.getTime() - LINK_TO_PLAY_LIFT_WINDOW_MS - 60_000);
+      await ban({ status: "lifted", liftedAt: longAgo, bannedAt: new Date(longAgo.getTime() - 3_600_000) });
+      await ban();
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("not will-lift while a lift is pending (that is the window's lift)", async () => {
+      await ban({ status: "lift_pending" });
+      expect(await gate()).toBeNull();
+    });
+
+    it("not will-lift when another ban stands too", async () => {
+      await ban();
+      await ban({ reason: "conduct", status: "applied" });
+      expect(await gate()).toBeNull();
+    });
+
+    it("⚠️ lift, cancel, banned again, new attempt inside the hour: lift-used, never lifted", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo, bannedAt: new Date(now.getTime() - 2 * 3_600_000) });
+      await ban({ status: "applied", bannedAt: new Date(now.getTime() - 5 * 60_000) });
+      expect(await gate()).toEqual({ kind: "lift-used", nextAt: new Date(tenMinAgo.getTime() + LINK_TO_PLAY_LIFT_WINDOW_MS) });
+    });
+
+    it("lifted still holds when the only other row predates the lift", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo, bannedAt: new Date(now.getTime() - 2 * 3_600_000) });
+      expect(await gate()).toMatchObject({ kind: "lifted" });
+    });
+
+    it("is null when another active ban stands too", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo });
+      await ban({ reason: "zone", status: "applied", expiresAt: new Date(now.getTime() + 3_600_000) });
+      expect(await gate()).toBeNull();
+    });
+
+    it("ignores an expired other ban", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo });
+      await ban({ reason: "zone", status: "applied", expiresAt: new Date(now.getTime() - 1000) });
+      expect(await gate()).toMatchObject({ kind: "lifted" });
+    });
   });
 
   describe("unlink", () => {

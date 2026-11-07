@@ -17,6 +17,27 @@ const DAY = 86_400_000;
 export const LINK_EMOTES = 3;
 export const LINK_TTL_MS = 24 * HOUR;
 
+// Link to play: an unlinked gamertag gets this much total play time, then a ban.
+export const LINK_TO_PLAY_GRACE_MS = 60 * MIN;
+// Starting a link attempt lifts the ban for this long...
+export const LINK_TO_PLAY_LIFT_MS = 60 * MIN;
+// ...at most once per this window per gamertag.
+export const LINK_TO_PLAY_LIFT_WINDOW_MS = 24 * HOUR;
+// Most removals the link sweep will make in one pass. More linked users than
+// this looking absent at once halts the pass: that is a bad member read, not
+// "a handful" of real leavers (spec §9).
+export const LINK_SWEEP_MAX_PER_PASS = 5;
+// ⚠️ The sweep runs at most this often (plus once right after the first full
+// member fetch). On the 10 s tick a bad member read lasting a few ticks would
+// otherwise repeat; hourly bounds a bad read to one pass per hour. The live
+// guildMemberRemove event is the fast path; this is only the backstop.
+export const LINK_SWEEP_INTERVAL_MS = 60 * MIN;
+// ⚠️ The launch instant (v2.18.0): the 02:00 UTC restart on 2026-11-07. Fixed, not
+// derived; moving it re-times every grace hour (runbook docs/deploy/2026-11-10-link-to-play.md).
+// Play before this never counts toward the grace hour, and bans before it
+// never count as "hour already spent".
+export const LINK_TO_PLAY_FROM = new Date("2026-11-07T02:00:00Z");
+
 // Founding
 export const FLAG_POOL_SIZE = 33;
 export const CEREMONY_MIN_PARTICIPANTS = 3;

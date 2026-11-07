@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
-  servers, identityLinks, players, referrals, verificationChallenges, type Database,
+  servers, bans, identityLinks, players, referrals, verificationChallenges, type Database,
 } from "@factions/db";
 import { PgVerificationStore } from "@factions/verification";
 import { sql, eq } from "drizzle-orm";
@@ -42,6 +42,35 @@ describe("/link status", () => {
     expect(reply.ephemeral).toBe(true);
     const embed = reply.embeds![0]!.toJSON();
     expect(embed.description).toContain("/link start");
+  });
+
+  it("tells a locked-out player they are let back on, with a time token", async () => {
+    await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
+    await ctx.roster.startLink(D, UID, { surface: "bot" });
+    const lifted = new Date(NOW.getTime() - 10 * 60_000);
+    await db.insert(bans).values({ serverId: (await db.select().from(servers))[0]!.id, dayzId: UID, gamertag: "Ada", bannedAt: new Date(NOW.getTime() - 7_200_000), reason: "unlinked", status: "lifted", liftedAt: lifted });
+    const embed = JSON.stringify((await run(input(D))).embeds![0]!.toJSON());
+    expect(embed).toContain("You're let back on the server until <t:");
+    expect(embed).toContain("to finish linking.");
+  });
+
+  it("tells a banned player who just started linking they will be let back on", async () => {
+    await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
+    await ctx.roster.startLink(D, UID, { surface: "bot" });
+    await db.insert(bans).values({ serverId: (await db.select().from(servers))[0]!.id, dayzId: UID, gamertag: "Ada", bannedAt: new Date(NOW.getTime() - 7_200_000), reason: "unlinked", status: "applied" });
+    const embed = JSON.stringify((await run(input(D))).embeds![0]!.toJSON());
+    expect(embed).toContain("You'll be let back on the server within 5 minutes to finish linking.");
+  });
+
+  it("lift-used names the date as well as the time", async () => {
+    await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
+    await ctx.roster.startLink(D, UID, { surface: "bot" });
+    const serverId = (await db.select().from(servers))[0]!.id;
+    const lifted = new Date(NOW.getTime() - 2 * 3_600_000);
+    await db.insert(bans).values({ serverId, dayzId: UID, gamertag: "Ada", bannedAt: new Date(lifted.getTime() - 3_600_000), reason: "unlinked", status: "lifted", liftedAt: lifted });
+    await db.insert(bans).values({ serverId, dayzId: UID, gamertag: "Ada", bannedAt: new Date(NOW.getTime() - 60_000), reason: "unlinked", status: "applied" });
+    const embed = JSON.stringify((await run(input(D))).embeds![0]!.toJSON());
+    expect(embed).toMatch(/Start linking again after <t:\d+:F> to get back on\./u);
   });
 
   it("shows the linked character", async () => {

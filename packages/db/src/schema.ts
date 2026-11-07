@@ -255,6 +255,26 @@ export const identityLinks = pgTable("identity_links", {
   byGamertagLower: index("identity_links_gamertag_lower_idx").on(sql`lower(${t.gamertag})`),
 }));
 
+/**
+ * Every identity link that ended, by any path (unlink, guild removal, a
+ * pending-challenge cleanup, a hand delete). Link-to-play bans a lost link at
+ * once, and the ban gate needs to know a link existed and went away.
+ *
+ * ⚠️ Written ONLY by the AFTER DELETE trigger `identity_link_ends_record` on
+ * `identity_links` (migration 0074), never by application code: three code
+ * paths delete links and a hand delete must count too.
+ * ⚠️ Outside the lock order: insert-only, written only by that trigger inside
+ * the deleting statement, referenced by nothing.
+ */
+export const identityLinkEnds = pgTable("identity_link_ends", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byDayz: index("identity_link_ends_dayz_idx").on(t.dayzId, t.endedAt),
+}));
+
 export const REFERRAL_SOURCES = ["link_bot", "link_site", "later_bot", "later_site"] as const;
 export type ReferralSource = (typeof REFERRAL_SOURCES)[number];
 
@@ -2156,7 +2176,8 @@ export const bans = pgTable("bans", {
   status: text("status").$type<BanStatus>().notNull().default("pending"),
   /**
    * ⚠️ Defaults to `'zone'` so the rows that existed before the PC gate keep
-   * their meaning. Only `unlinked_pc` rows are ever lifted by starting a link.
+   * their meaning. `unlinked` rows (link-to-play) are lifted by starting a
+   * link; `unlinked_pc` was the retired PC gate's and is never lifted that way.
    */
   reason: text("reason").$type<BanReason>().notNull().default("zone"),
   /**
@@ -2171,6 +2192,21 @@ export const bans = pgTable("bans", {
   liftedAt: timestamp("lifted_at", { withTimezone: true }),
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
+  /**
+   * The identifiers this ban actually added to Nitrado's ban list, so removal
+   * takes out exactly those and nothing a different ban put there. ⚠️ NULL
+   * means a row applied before this column existed: removal falls back to
+   * both identifiers (the old behaviour).
+   */
+  nitradoAdded: text("nitrado_added").array(),
+  /**
+   * Names a FAILED `addBans` for this row tried to add (union over attempts):
+   * the write may have landed with the response lost, so they may be on the
+   * list. A later success stamps those into `nitrado_added`; a row that fails
+   * out removes only these. ⚠️ NULL or [] means no failed attempt ever wrote:
+   * a failure at the read touched nothing, so a cleanup must remove nothing.
+   */
+  nitradoAttempted: text("nitrado_attempted").array(),
 }, (t) => ({
   /** One ban per incident per person. */
   oneperIncident: uniqueIndex("bans_incident_person_uq").on(t.incidentId, t.dayzId),

@@ -106,6 +106,15 @@ export class FakeGuild implements GuildGateway {
   isMember(userId: string) {
     return this.members.has(userId);
   }
+  /** User ids whose REST member fetch errors (not Unknown Member): answers null. */
+  memberFetchFails = new Set<string>();
+  /** User ids the REST fetch finds even though the cache does not (a cold or partial cache). */
+  restOnlyMembers = new Set<string>();
+  async fetchMemberExists(userId: string) {
+    this.calls.push(`fetchMemberExists ${userId}`);
+    if (this.memberFetchFails.has(userId)) return null;
+    return this.members.has(userId) || this.restOnlyMembers.has(userId);
+  }
   async addRole(userId: string, roleId: string) {
     this.fail("addRole");
     this.roles.get(roleId)?.members.add(userId);

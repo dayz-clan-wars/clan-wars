@@ -1,0 +1,1 @@
+ALTER TABLE "bans" ADD COLUMN "nitrado_attempted" text[];

@@ -22,6 +22,7 @@ const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
 /** The rules.ts exports the guide may name, by key. Composite rows (ranges, pairs) format themselves below. */
 const SCALARS: Record<string, number> = {
   LINK_EMOTES: R.LINK_EMOTES, LINK_TTL_MS: R.LINK_TTL_MS,
+  LINK_TO_PLAY_GRACE_MS: R.LINK_TO_PLAY_GRACE_MS, LINK_TO_PLAY_LIFT_MS: R.LINK_TO_PLAY_LIFT_MS,
   FLAG_POOL_SIZE: R.FLAG_POOL_SIZE, CEREMONY_MIN_PARTICIPANTS: R.CEREMONY_MIN_PARTICIPANTS, CEREMONY_WINDOW_MS: R.CEREMONY_WINDOW_MS,
   CLAIM_WINDOW_MS: R.CLAIM_WINDOW_MS, ACTIVATION_WINDOW_MS: R.ACTIVATION_WINDOW_MS,
   DECLARATIONS_PER_PLAYER: R.DECLARATIONS_PER_PLAYER, NEW_POLE_GRACE_MS: R.NEW_POLE_GRACE_MS, RELEASED_POLE_GRACE_MS: R.RELEASED_POLE_GRACE_MS,
@@ -148,6 +149,8 @@ const row = (group: (typeof GUIDE_GROUPS)[number], label: string, key: string): 
 export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Getting in", "Link: emotes to perform", "LINK_EMOTES_ORDERED"),
   row("Getting in", "Link: time limit", "LINK_TTL_MS"),
+  row("Getting in", "Unlinked gamertag: play time before a ban", "LINK_TO_PLAY_GRACE_MS"),
+  row("Getting in", "Starting a link lifts the ban for", "LINK_TO_PLAY_LIFT_MS"),
   row("Founding", "Flags in the pool", "FLAG_POOL"),
   row("Founding", "Ceremony: linked players required", "CEREMONY_MIN_PARTICIPANTS"),
   row("Founding", "Ceremony: window", "CEREMONY_WINDOW_MS"),
