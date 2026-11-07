@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { bans, identityLinks, players, playerSessions, verificationChallenges } from "@factions/db";
 import {
-  LINK_TO_PLAY_FROM, LINK_TO_PLAY_LIFT_WINDOW_MS, linkGateAction, unlinkedPlayMs, type Interval, type LinkGateFacts,
+  BAN_ACTIVE_STATUSES, type BanActiveStatus, LINK_TO_PLAY_FROM, LINK_TO_PLAY_LIFT_WINDOW_MS, linkGateAction, unlinkedPlayMs, type Interval, type LinkGateFacts,
 } from "@factions/domain";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { escapeMarkdown } from "./site-links.js";
@@ -9,11 +9,8 @@ import { escapeMarkdown } from "./site-links.js";
 export type Who = { dayzId: string; gamertag: string };
 export type LinkGateResult = { banned: Who[]; lifted: Who[]; closed: Who[] };
 
-/** Ban statuses that mean "in force, queued, or on its way out". */
-const ACTIVE = ["pending", "applied", "lift_pending"] as const;
-type Active = (typeof ACTIVE)[number];
 /** When several are active, the one the rule should see first (the brief's order). */
-const PREFER: Active[] = ["applied", "lift_pending", "pending"];
+const PREFER: BanActiveStatus[] = ["applied", "lift_pending", "pending"];
 
 /**
  * Link to play (spec 2026-11-06 §3): bans a gamertag that plays unlinked past
@@ -61,7 +58,8 @@ export async function linkGateTick(
         where ended_at >= ${fromIso}::timestamptz and ended_at <= ${nowIso}::timestamptz
       union
       select dayz_id from bans
-        where server_id = ${serverId} and reason = 'unlinked' and status in ('pending', 'applied', 'lift_pending')
+        where server_id = ${serverId} and reason = 'unlinked'
+          and status in (${sql.join(BAN_ACTIVE_STATUSES.map((st) => sql`${st}`), sql`, `)})
     ) c
     where not exists (select 1 from identity_links l where l.dayz_id = c.dayz_id)
        or exists (
@@ -133,7 +131,7 @@ export async function linkGateTick(
       playedMs: unlinkedPlayMs(sessions.get(dayzId) ?? [], from, now),
       linkEndedSinceFrom: ended.has(dayzId),
       bannedSinceFrom: mine.some((b) => b.bannedAt.getTime() >= from.getTime()),
-      activeBan: (active?.status as Active | undefined) ?? null,
+      activeBan: (active?.status as BanActiveStatus | undefined) ?? null,
       lastLiftAt,
       liftsInWindow,
       attemptOpen: open.has(dayzId),
@@ -160,10 +158,18 @@ export async function linkGateTick(
 
     // lift or close: both hand the row to banTick's lift arm.
     if (!active) continue;
+    // ⚠️ A `pending` row that banTick has already TRIED to apply may be on the
+    // list: a write can land with its response lost. Closing it here would
+    // stamp [] and leave its dry_run default, so the lift arm would remove
+    // nothing and the entry would stay forever. Leave it to banTick: it either
+    // applies (stamping what it wrote, and the next pass closes the applied
+    // row) or fails out (and its cleanup removes what was attempted).
+    if (active.status === "pending" && active.attempts > 0) continue;
     if (write) {
-      // ⚠️ A `pending` row never reached Nitrado. `nitrado_added = []` makes
-      // the lift arm remove nothing; null would fall back to removing both
-      // identifiers and could free an entry the owner added by hand.
+      // ⚠️ A `pending` row with no attempts never reached Nitrado.
+      // `nitrado_added = []` makes the lift arm remove nothing; null would fall
+      // back to removing both identifiers and could free an entry the owner
+      // added by hand.
       const set = active.status === "pending"
         ? { status: "lift_pending" as const, nitradoAdded: [] as string[] }
         : { status: "lift_pending" as const };

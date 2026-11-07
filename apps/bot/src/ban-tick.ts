@@ -2,6 +2,7 @@ import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or, inArray } from "d
 import { bans, banAnnouncements, identityLinks, type Database } from "@factions/db";
 import { BAN_MAX_ATTEMPTS, BAN_REASON_TEXT } from "@factions/domain";
 import { noticeUserTx } from "@factions/roster/internal";
+import { BanWriteError } from "@factions/nitrado";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -34,6 +35,13 @@ async function announceTx(tx: Tx, row: typeof bans.$inferSelect, kind: "applied"
 /**
  * The Nitrado-facing surface this tick needs. `NitradoClient` satisfies it;
  * tests substitute a fake that records `addBans`/`removeBans` calls.
+ *
+ * `addBans` resolves to the names it added (never ones already listed). ⚠️ On
+ * failure it must throw a `BanWriteError` whose `attempted` names what it may
+ * have written: the cleanup and the retry's stamp trust that list to tell the
+ * bot's entries from the owner's hand bans. Any other error is read as
+ * "nothing attempted" — the side that can orphan an entry rather than free a
+ * hand ban.
  */
 export type BanTarget = {
   addBans(names: string[]): Promise<string[]>;
@@ -178,6 +186,8 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
     let failure: unknown;
     // Names the batched addBans actually put on the list; a dry-run adds none.
     let added: string[] = [];
+    // On failure: names the call may have written (see BanTarget).
+    let attemptedNow: string[] = [];
     // A dry-run tick never reaches Nitrado, but every row IS still stamped
     // and closed, so the audit trail shows exactly what would have
     // happened. Both the dayzId and the gamertag are sent for every row —
@@ -192,9 +202,11 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         added = await client.addBans(names);
       } catch (err) {
         failure = err;
+        attemptedNow = err instanceof BanWriteError ? err.attempted.map((n) => n.trim()) : [];
       }
     }
     for (const row of pending) {
+      const mine = [row.dayzId, row.gamertag].map((n) => n.trim());
       if (failure === undefined) {
         await db.transaction(async (tx) => {
           const [applied] = await tx.update(bans)
@@ -210,11 +222,17 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
             .returning({ id: bans.id });
           if (!applied) return;   // another tick won the race
           // Names we added this call (addBans returns trimmed strings, so compare
-          // trimmed) plus any our own other active rows already hold.
+          // trimmed), plus any our own other active rows already hold, plus any
+          // an earlier FAILED attempt for this row may have written.
+          // ⚠️ That last part is the lost-response retry: attempt 1's write
+          // landed, its response did not, so this call found both names present
+          // and added nothing. Without the earlier attempt's names the stamp is
+          // [] and no lift, expiry or close ever removes the entry. A success
+          // means every name sent is on the list now, so they are all there.
           if (!opts.dryRun) {
-            const mine = [row.dayzId, row.gamertag].map((n) => n.trim());
+            const prior = (row.nitradoAttempted ?? []).map((n) => n.trim());
             const inherited = await inheritedNames(tx as unknown as Database, row, serverId);
-            const stamp = [...new Set([...mine.filter((n) => added.includes(n)), ...inherited])];
+            const stamp = [...new Set([...mine.filter((n) => added.includes(n) || prior.includes(n)), ...inherited])];
             await tx.update(bans).set({ nitradoAdded: stamp }).where(eq(bans.id, row.id));
           }
           out.applied++;
@@ -253,6 +271,9 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
       } else {
         const attempts = row.attempts + 1;
         const nowFailed = attempts >= BAN_MAX_ATTEMPTS;
+        // Every name any attempt for this row may have written, kept on the row
+        // so the retry's stamp and the cleanup below can see across ticks.
+        const attempted = [...new Set([...(row.nitradoAttempted ?? []).map((n) => n.trim()), ...mine.filter((n) => attemptedNow.includes(n))])];
         // ⚠️ On the last permitted attempt the row must become `failed`, NOT
         // stay `pending`. A stuck `pending` renders as an active ban that no
         // later query revisits (the `attempts < BAN_MAX_ATTEMPTS` predicate
@@ -263,6 +284,7 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           attempts,
           status: nowFailed ? "failed" : "pending",
           lastError: String(failure).slice(0, 500),
+          nitradoAttempted: attempted,
         }).where(eq(bans.id, row.id));
         if (nowFailed) {
           out.failed++;
@@ -289,11 +311,15 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           // entirely above, so `failure` can never be set) — checked
           // explicitly anyway as a guard against that invariant changing
           // silently underfoot.
-          if (!opts.dryRun && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
+          //
+          // ⚠️ Removes ONLY names an attempt may have written (`attempted`),
+          // never both identifiers: when every attempt failed at the READ the
+          // names were never ours, and if they are on the list now the owner put
+          // them there by hand. Removing them would free that ban once Nitrado
+          // recovers. Nothing attempted, nothing removed.
+          if (!opts.dryRun && attempted.length > 0 && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
             try {
-              // ⚠️ A failed row was never stamped with nitradoAdded, so the fallback
-              // removes both identifiers: a lost-response write may have added either.
-              await client.removeBans(row.nitradoAdded ?? [row.dayzId, row.gamertag]);
+              await client.removeBans(attempted);
             } catch (err) {
               console.error(`ban-tick: cleanup removeBans failed for failed ban ${row.id} (dayzId ${row.dayzId}) — its Nitrado entry may be orphaned`, err);
             }

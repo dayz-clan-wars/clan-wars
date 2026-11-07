@@ -5,6 +5,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { linkGateTick, linkGateOpsLines } from "../src/link-gate-tick.js";
+import { banTick, type BanTarget } from "../src/ban-tick.js";
 
 const URL = requireTestDatabaseUrl();
 const P = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -161,6 +162,14 @@ describe("linkGateTick", () => {
       expect(row!.nitradoAdded).toEqual([P, "Unlinked"]);   // untouched: the lift arm removes what it added
     });
 
+    it("⚠️ a pending ban banTick already tried to apply is left alone for a linked player", async () => {
+      await ban({ status: "pending", attempts: 1, nitradoAttempted: [P, "Unlinked"] });
+      await link();
+      expect(await tick()).toEqual({ banned: [], lifted: [], closed: [] });
+      const [row] = await allBans();
+      expect(row).toMatchObject({ status: "pending", attempts: 1, nitradoAdded: null });
+    });
+
     it("⚠️ a pending ban on a linked dayz id is closed with nitrado_added = [], so the lift arm removes nothing", async () => {
       await ban({ status: "pending" });
       await link();
@@ -211,6 +220,54 @@ describe("linkGateTick", () => {
     const real = await tick(NOW, true);
     expect(real).toEqual(dryClose);
   });
+  it("end to end with banTick over a fake Nitrado list: ban, lift, re-ban, link, empty list", async () => {
+    const list: string[] = [];
+    const nitrado: BanTarget = {
+      addBans: async (names) => {
+        const fresh = [...new Set(names)].filter((n) => !list.includes(n));
+        list.push(...fresh);
+        return fresh;
+      },
+      removeBans: async (names) => {
+        for (const n of names) { const i = list.indexOf(n); if (i >= 0) list.splice(i, 1); }
+      },
+    };
+    const pass = async (now: Date) => {
+      const g = await tick(now);
+      await banTick(db, nitrado, { now, dryRun: false, since: new Date(now.getTime() - 24 * HOUR), serverId });
+      return g;
+    };
+    const statuses = async () => (await allBans()).map((b) => b.status);
+
+    // Unlinked play past the grace hour: banned and on the list in one pass.
+    await session(P, at(HOUR), at(2 * HOUR + MIN));
+    expect((await pass(NOW)).banned.map((b) => b.dayzId)).toEqual([P]);
+    expect(await statuses()).toEqual(["applied"]);
+    expect(list).toEqual([P, "Unlinked"]);
+
+    // Someone starts linking it: lifted, off the list.
+    await challenge(P, "d1", new Date(NOW.getTime() + 2 * MIN));
+    const t1 = new Date(NOW.getTime() + 5 * MIN);
+    expect((await pass(t1)).lifted.map((b) => b.dayzId)).toEqual([P]);
+    expect(await statuses()).toEqual(["lifted"]);
+    expect(list).toEqual([]);
+
+    // The attempt is cancelled: banned again at once, back on the list.
+    await db.update(verificationChallenges).set({ canceledAt: new Date(t1.getTime() + MIN) });
+    const t2 = new Date(t1.getTime() + 5 * MIN);
+    expect((await pass(t2)).banned.map((b) => b.dayzId)).toEqual([P]);
+    expect(await statuses()).toEqual(["lifted", "applied"]);
+    expect(list).toEqual([P, "Unlinked"]);
+
+    // It links: the ban closes for good and the list is empty.
+    await link();
+    const t3 = new Date(t2.getTime() + 5 * MIN);
+    expect((await pass(t3)).closed.map((b) => b.dayzId)).toEqual([P]);
+    expect(await statuses()).toEqual(["lifted", "lifted"]);
+    expect(list).toEqual([]);
+    expect(await pass(new Date(t3.getTime() + 5 * MIN))).toEqual({ banned: [], lifted: [], closed: [] });
+  });
+
 });
 
 describe("linkGateOpsLines", () => {

@@ -1,30 +1,45 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, bans, servers, identityLinks, clanNotices, banAnnouncements, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { BanWriteError } from "@factions/nitrado";
 import { banTick, type BanTarget } from "../src/ban-tick.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
 const DAYZ_ID = "76561198000000001";
 
-function fakeClient(impl?: { addBans?: (n: string[]) => Promise<void>; removeBans?: (n: string[]) => Promise<void>; list?: string[] }): BanTarget & { added: string[][]; removed: string[][] } {
+/**
+ * How one simulated addBans call goes, like NitradoClient's: `read` fails at
+ * the read (nothing attempted), `write` fails at the write (the missing names
+ * attempted, nothing lands), `lost` lands the write and loses the response.
+ */
+type AddMode = "ok" | "read" | "write" | "lost";
+
+function fakeClient(impl?: { addBans?: (n: string[]) => Promise<void>; removeBans?: (n: string[]) => Promise<void>; list?: string[]; modes?: AddMode[] }): BanTarget & { added: string[][]; removed: string[][]; list: string[] } {
   // Simulated Nitrado list: addBans returns only names not already on it.
   const list = [...(impl?.list ?? [])];
+  const modes = [...(impl?.modes ?? [])];
   const added: string[][] = [];
   const removed: string[][] = [];
   return {
     added,
     removed,
+    list,
     addBans: vi.fn(async (names: string[]) => {
       if (impl?.addBans) { await impl.addBans(names); }
       added.push(names);
+      const mode = modes.shift() ?? "ok";
+      if (mode === "read") throw new BanWriteError(new Error("read timed out"), []);
       const fresh = [...new Set(names)].filter((n) => !list.includes(n));
+      if (mode === "write") throw new BanWriteError(new Error("write refused"), fresh);
       list.push(...fresh);
+      if (mode === "lost") throw new BanWriteError(new Error("response lost"), fresh);
       return fresh;
     }),
     removeBans: vi.fn(async (names: string[]) => {
       if (impl?.removeBans) { await impl.removeBans(names); }
       removed.push(names);
+      for (const n of names) { const i = list.indexOf(n); if (i >= 0) list.splice(i, 1); }
     }),
   };
 }
@@ -260,7 +275,7 @@ describe("banTick", () => {
   // orphaned forever without a best-effort cleanup here.
   it("a row that fails out to `failed` gets a best-effort removeBans cleanup", async () => {
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), attempts: 2, dryRun: false });
-    const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
+    const fake = fakeClient({ modes: ["lost"] });
     const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.failed).toBe(1);
     expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
@@ -272,7 +287,7 @@ describe("banTick", () => {
       bannedAt: at("2026-09-14T00:00:00Z"), status: "applied", dryRun: false,
       appliedAt: at("2026-09-14T00:00:00Z"), expiresAt: null,
     });
-    const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
+    const fake = fakeClient({ modes: ["write"] });
     await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(fake.removed).toEqual([]);
   });
@@ -546,6 +561,65 @@ describe("banTick", () => {
       await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
       await banTick(db, fakeClient(), { now: at("2026-09-15T02:00:00Z"), dryRun: true, since: at("2026-09-15T00:00:00Z"), serverId });
       expect((await allRows())[0]!.nitradoAdded).toEqual([]);
+    });
+  });
+  describe("a failed addBans remembers what it may have written", () => {
+    const opts = (iso: string) => ({ now: at(iso), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+
+    it("⚠️ lost response then a retry that adds nothing: the stamp keeps both, and the lift removes both", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), reason: "unlinked" });
+      const fake = fakeClient({ modes: ["lost"] });
+      await banTick(db, fake, opts("2026-09-15T01:05:00Z"));
+      expect((await allRows())[0]).toMatchObject({ status: "pending", attempts: 1, nitradoAttempted: [DAYZ_ID, "Sasha"] });
+      expect(fake.list).toEqual([DAYZ_ID, "Sasha"]);
+      await banTick(db, fake, opts("2026-09-15T01:10:00Z"));
+      expect((await allRows())[0]).toMatchObject({ status: "applied", nitradoAdded: [DAYZ_ID, "Sasha"] });
+      await db.update(bans).set({ status: "lift_pending" });
+      await banTick(db, fake, opts("2026-09-15T01:15:00Z"));
+      expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+      expect(fake.list).toEqual([]);
+    });
+
+    it("a retry after a lost response does not claim a hand entry that was there before", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), reason: "unlinked" });
+      const fake = fakeClient({ list: ["Sasha"], modes: ["lost"] });
+      await banTick(db, fake, opts("2026-09-15T01:05:00Z"));
+      await banTick(db, fake, opts("2026-09-15T01:10:00Z"));
+      expect((await allRows())[0]!.nitradoAdded).toEqual([DAYZ_ID]);
+    });
+
+    it("⚠️ three READ failures with a hand entry present: the cleanup removes nothing and the hand entry survives", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), reason: "unlinked" });
+      const fake = fakeClient({ list: [DAYZ_ID, "Sasha"], modes: ["read", "read", "read"] });
+      for (const t of ["01:05", "01:10", "01:15"]) await banTick(db, fake, opts(`2026-09-15T${t}:00Z`));
+      expect((await allRows())[0]).toMatchObject({ status: "failed", attempts: 3, nitradoAttempted: [] });
+      expect(fake.removed).toEqual([]);
+      expect(fake.list).toEqual([DAYZ_ID, "Sasha"]);
+    });
+
+    it("three WRITE failures: the cleanup removes what was attempted, and only that", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), reason: "unlinked" });
+      const fake = fakeClient({ list: ["Sasha"], modes: ["write", "write", "write"] });
+      for (const t of ["01:05", "01:10", "01:15"]) await banTick(db, fake, opts(`2026-09-15T${t}:00Z`));
+      expect((await allRows())[0]).toMatchObject({ status: "failed", nitradoAttempted: [DAYZ_ID] });
+      expect(fake.removed).toEqual([[DAYZ_ID]]);
+      expect(fake.list).toEqual(["Sasha"]);
+    });
+
+    it("a lost write then two read failures: the cleanup still removes what the first attempt wrote", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), reason: "unlinked" });
+      const fake = fakeClient({ modes: ["lost", "read", "read"] });
+      for (const t of ["01:05", "01:10", "01:15"]) await banTick(db, fake, opts(`2026-09-15T${t}:00Z`));
+      expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+      expect(fake.list).toEqual([]);
+    });
+
+    it("an error that is not a BanWriteError counts as nothing attempted", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), attempts: 2 });
+      const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
+      await banTick(db, fake, opts("2026-09-15T01:05:00Z"));
+      expect((await allRows())[0]).toMatchObject({ status: "failed", nitradoAttempted: [] });
+      expect(fake.removed).toEqual([]);
     });
   });
 });

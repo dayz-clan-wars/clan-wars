@@ -12,6 +12,25 @@ const API_BASE = "https://api.nitrado.net";
 const FILENAME_RE = /DayZServer_X1_x64_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.(ADM|RPT)$/u;
 
 /**
+ * What a failed `addBans` throws. `attempted` is the names the call tried to
+ * add: the ones missing from the list at read time when the WRITE failed (it
+ * may have landed with the response lost, so they may be on the list now), or
+ * [] when the READ failed (nothing was written).
+ *
+ * ⚠️ The difference matters because the owner bans by hand on Nitrado: a name
+ * that was already present is theirs, and a caller cleaning up after a failure
+ * must remove only what it might itself have added (spec 2026-11-06 §5).
+ */
+export class BanWriteError extends Error {
+  readonly attempted: string[];
+  constructor(cause: unknown, attempted: string[]) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "BanWriteError";
+    this.attempted = attempted;
+  }
+}
+
+/**
  * Reads ADM files from a Nitrado game server.
  *
  * `fetchFn` is injected rather than calling global fetch, so tests exercise
@@ -394,10 +413,22 @@ export class NitradoClient {
         wanted.push(name);
       }
     }
-    const bans = await this.getBans();
+    let bans: string[];
+    try {
+      bans = await this.getBans();
+    } catch (err) {
+      // The read failed: nothing was written, so nothing can have been added.
+      throw new BanWriteError(err, []);
+    }
     const missing = wanted.filter((n) => !bans.includes(n));
     if (missing.length === 0) return []; // nothing to do — do not rewrite the field
-    await this.setBans([...bans, ...missing]);
+    try {
+      await this.setBans([...bans, ...missing]);
+    } catch (err) {
+      // ⚠️ The write may have landed with only the response lost, so `missing`
+      // may be on the list now. The caller must remember them as possibly ours.
+      throw new BanWriteError(err, missing);
+    }
     return missing;
   }
 

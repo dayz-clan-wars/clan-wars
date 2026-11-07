@@ -2199,6 +2199,14 @@ export const bans = pgTable("bans", {
    * both identifiers (the old behaviour).
    */
   nitradoAdded: text("nitrado_added").array(),
+  /**
+   * Names a FAILED `addBans` for this row tried to add (union over attempts):
+   * the write may have landed with the response lost, so they may be on the
+   * list. A later success stamps those into `nitrado_added`; a row that fails
+   * out removes only these. ⚠️ NULL or [] means no failed attempt ever wrote:
+   * a failure at the read touched nothing, so a cleanup must remove nothing.
+   */
+  nitradoAttempted: text("nitrado_attempted").array(),
 }, (t) => ({
   /** One ban per incident per person. */
   oneperIncident: uniqueIndex("bans_incident_person_uq").on(t.incidentId, t.dayzId),
