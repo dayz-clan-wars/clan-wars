@@ -29,11 +29,11 @@ on connect). That repo deploys to the live server on release, so it is the owner
 ## 2. Announce a day ahead
 
 The owner posts this in the announcements channel at least a day before launch. The
-timestamps below are for the placeholder launch instant 2026-11-10T14:00Z (unix
-1794319200). ⚠️ If the instant moves, recompute both `<t:…>` values
+timestamps below are for the launch instant 2026-11-07T02:00Z (unix
+1794016800). ⚠️ If the instant moves, recompute both `<t:…>` values
 (`date -u -j -f "%Y-%m-%dT%H:%M:%SZ" <ISO> +%s` on macOS) before posting.
 
-    @everyone **Link to play starts <t:1794319200:F>** (<t:1794319200:R>).
+    @everyone **Link to play starts <t:1794016800:F>** (<t:1794016800:R>).
 
     From then on, every gamertag that plays on Clan Wars needs to be linked to a Discord
     account. You get 1 hour of play before it matters, so jump on and have a go.
@@ -52,7 +52,7 @@ timestamps below are for the placeholder launch instant 2026-11-10T14:00Z (unix
 ## 3. Release setting `LINK_TO_PLAY_FROM`
 
 Set `LINK_TO_PLAY_FROM` in `packages/domain/src/rules.ts` to the real launch instant
-(the placeholder is `2026-11-10T14:00:00Z`), via its own `release/x.y.z` PR. Play before
+(v2.18.0 set it to `2026-11-07T02:00:00Z`), via its own `release/x.y.z` PR. Play before
 that instant never counts toward the grace hour. Deploy and confirm the tag is checked
 out. `LINK_TO_PLAY` is still unset.
 

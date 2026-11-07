@@ -61,7 +61,7 @@ export interface GuildGateway {
   isMember(userId: string): boolean;
   /**
    * REST, never the cache: true if Discord returns the member, false ONLY on
-   * Discord's Unknown Member (10007, or a 404), null on any other error. For
+   * Discord's Unknown Member (10007) or Unknown User (10013), null on any other error. For
    * the link sweep, whose removals are irreversible: a cache miss is a
    * suspicion, this is the confirmation, and "could not ask" is not "gone".
    */
@@ -323,7 +323,10 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
         await guild.members.fetch({ user: userId, force: true });
         return true;
       } catch (err) {
-        if (err instanceof DiscordAPIError && (err.code === 10007 || err.status === 404)) return false;
+        // ⚠️ Unknown Member (10007) and Unknown User (10013) only, never a bare 404:
+        // Unknown Guild (10004) is a 404 too, and reading it as "gone" would let
+        // a lost guild unlink every sweep candidate.
+        if (err instanceof DiscordAPIError && (err.code === 10007 || err.code === 10013)) return false;
         console.error(`guild: member fetch for ${userId} failed`, err);
         return null;
       }

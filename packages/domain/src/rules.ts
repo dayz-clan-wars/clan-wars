@@ -32,11 +32,11 @@ export const LINK_SWEEP_MAX_PER_PASS = 5;
 // otherwise repeat; hourly bounds a bad read to one pass per hour. The live
 // guildMemberRemove event is the fast path; this is only the backstop.
 export const LINK_SWEEP_INTERVAL_MS = 60 * MIN;
-// ⚠️ Placeholder launch instant: the runbook (docs/deploy/2026-11-10-link-to-play.md)
-// sets the real one by release.
+// ⚠️ The launch instant (v2.18.0): the 02:00 UTC restart on 2026-11-07. Fixed, not
+// derived; moving it re-times every grace hour (runbook docs/deploy/2026-11-10-link-to-play.md).
 // Play before this never counts toward the grace hour, and bans before it
 // never count as "hour already spent".
-export const LINK_TO_PLAY_FROM = new Date("2026-11-10T14:00:00Z");
+export const LINK_TO_PLAY_FROM = new Date("2026-11-07T02:00:00Z");
 
 // Founding
 export const FLAG_POOL_SIZE = 33;
