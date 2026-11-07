@@ -16,14 +16,22 @@ export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome, endsWhen?: s
   "unavailable": () => "Could not issue a challenge right now. Try again in a moment.",
 };
 
+type GateKind = NonNullable<NonNullable<LinkStatus["challenge"]>["gate"]>["kind"];
+
 /**
  * What a locked-out player is told beside their open challenge, from
  * `LinkStatus.challenge.gate`. ⚠️ Takes the FORMATTED instant, like
  * `held-by-other` above: the bot passes a Discord time token, the site its own
- * `when`. Keyed to the gate's kinds, so a new kind fails the build here.
+ * `when`; `will-lift` has no instant and ignores it. Keyed to the gate's kinds,
+ * so a new kind fails the build here.
+ *
+ * ⚠️ "within 5 minutes" is the ban block's interval (`REAPER_INTERVAL_MS` in
+ * apps/bot/src/discord.ts, where the link gate and banTick run); a bot test
+ * holds the two together.
  */
-export const GATE_COPY: Record<"lifted" | "lift-used", (time: string) => string> = {
+export const GATE_COPY: Record<GateKind, (time: string) => string> = {
   "lifted": (time) => `You're let back on the server until ${time} to finish linking.`,
+  "will-lift": () => "You'll be let back on the server within 5 minutes to finish linking.",
   "lift-used": (time) => `You've had your hour back on the server for today. Start linking again after ${time} to get back on.`,
 };
 

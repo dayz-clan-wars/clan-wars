@@ -99,9 +99,43 @@ describe("roster link writes", () => {
       expect(await gate()).toEqual({ kind: "lift-used", nextAt: new Date(lifted.getTime() + LINK_TO_PLAY_LIFT_WINDOW_MS) });
     });
 
-    it("is null when banned and no lift is spent (starting will lift)", async () => {
+    it("will-lift: banned, applied, and no lift spent in the window", async () => {
       await ban();
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("will-lift: a pending ban counts (it is applied, then lifted)", async () => {
+      await ban({ status: "pending" });
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("will-lift: a lift more than a window ago is no longer spent", async () => {
+      const longAgo = new Date(now.getTime() - LINK_TO_PLAY_LIFT_WINDOW_MS - 60_000);
+      await ban({ status: "lifted", liftedAt: longAgo, bannedAt: new Date(longAgo.getTime() - 3_600_000) });
+      await ban();
+      expect(await gate()).toEqual({ kind: "will-lift" });
+    });
+
+    it("not will-lift while a lift is pending (that is the window's lift)", async () => {
+      await ban({ status: "lift_pending" });
       expect(await gate()).toBeNull();
+    });
+
+    it("not will-lift when another ban stands too", async () => {
+      await ban();
+      await ban({ reason: "conduct", status: "applied" });
+      expect(await gate()).toBeNull();
+    });
+
+    it("⚠️ lift, cancel, banned again, new attempt inside the hour: lift-used, never lifted", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo, bannedAt: new Date(now.getTime() - 2 * 3_600_000) });
+      await ban({ status: "applied", bannedAt: new Date(now.getTime() - 5 * 60_000) });
+      expect(await gate()).toEqual({ kind: "lift-used", nextAt: new Date(tenMinAgo.getTime() + LINK_TO_PLAY_LIFT_WINDOW_MS) });
+    });
+
+    it("lifted still holds when the only other row predates the lift", async () => {
+      await ban({ status: "lifted", liftedAt: tenMinAgo, bannedAt: new Date(now.getTime() - 2 * 3_600_000) });
+      expect(await gate()).toMatchObject({ kind: "lifted" });
     });
 
     it("is null when another active ban stands too", async () => {

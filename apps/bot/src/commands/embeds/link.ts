@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { LinkStatus } from "@factions/roster";
-import { ENDED_COPY, GATE_COPY, REFERRER_UNNAMED, clock, formatRemaining, when } from "@factions/copy";
+import { ENDED_COPY, GATE_COPY, REFERRER_UNNAMED, at, clock, formatRemaining, when } from "@factions/copy";
 
 /** The site's ink. Kept here rather than per-embed so every card matches. */
 const GOLD = 0xc8a34a;
@@ -37,9 +37,15 @@ export function linkStatusEmbed(status: LinkStatus, now: Date, siteBaseUrl: stri
       { name: "Redraws left", value: String(c.drawsLeft), inline: true },
     );
     if (c.gate) {
-      // ⚠️ The clock token renders in the reader's zone; `when` (UTC) is only the fallback for an unrepresentable date.
-      const t = c.gate.kind === "lifted" ? c.gate.until : c.gate.nextAt;
-      embed.addFields({ name: "Back on the server", value: GATE_COPY[c.gate.kind](clock(t) ?? when(t)), inline: false });
+      // ⚠️ The time tokens render in the reader's zone; `when` (UTC) is only the
+      // fallback for an unrepresentable date. `lifted` ends within the hour, so
+      // the time of day is enough; `lift-used` can be tomorrow, so it carries
+      // the date too.
+      const g = c.gate;
+      const time = g.kind === "lifted" ? clock(g.until) ?? when(g.until)
+        : g.kind === "lift-used" ? at(g.nextAt) ?? when(g.nextAt)
+        : "";
+      embed.addFields({ name: "Back on the server", value: GATE_COPY[g.kind](time), inline: false });
     }
     embed.setFooter({ text: "Perform them in order, in game. `/link cancel` drops the challenge." });
   }

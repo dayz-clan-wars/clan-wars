@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { bans, factions, factionMembers, identityLinks, servers } from "@factions/db";
-import { HOLDING_STATUSES, LINK_TTL_MS, LINK_TO_PLAY_LIFT_MS, LINK_TO_PLAY_LIFT_WINDOW_MS, emoteLabel } from "@factions/domain";
+import { BAN_ACTIVE_STATUSES, HOLDING_STATUSES, LINK_TTL_MS, LINK_TO_PLAY_LIFT_MS, LINK_TO_PLAY_LIFT_WINDOW_MS, emoteLabel } from "@factions/domain";
 import { lockDeclarations, releaseTx } from "@factions/declarations";
 import {
   PgVerificationStore, issueChallenge, checkReferral, DRAW_WINDOW_MS, MAX_DRAWS_PER_TARGET,
@@ -12,11 +12,16 @@ import { resolveReferrer, referredByFor, type ReferrerRefusal } from "./referral
 export type LinkStep = { token: string; label: string; confirmed: boolean };
 /**
  * Where a locked-out gamertag stands with link-to-play, shown beside its open
- * challenge. `lifted`: on the server now, until `until`. `lift-used`: banned
- * and today's lift is spent; starting again works after `nextAt`. Null: no
- * `unlinked` ban in play, or another ban is, which a link cannot lift.
+ * challenge. `lifted`: on the server now, until `until`. `will-lift`: banned,
+ * no lift spent today, so the gate lets them on within a ban pass. `lift-used`:
+ * banned and today's lift is spent; starting again works after `nextAt`.
+ * Null: no `unlinked` ban in play, or another ban is, which a link cannot lift.
  */
-export type LinkGate = { kind: "lifted"; until: Date } | { kind: "lift-used"; nextAt: Date } | null;
+export type LinkGate =
+  | { kind: "lifted"; until: Date }
+  | { kind: "will-lift" }
+  | { kind: "lift-used"; nextAt: Date }
+  | null;
 export type LinkStatus = {
   link: { dayzId: string; gamertag: string; verifiedAt: Date } | null;
   /** Who this player was referred by, permanently, or null if nobody. A null gamertag: referred, but no name is known any more. */
@@ -76,40 +81,55 @@ export async function linkStatusDb(db: Database, discordId: string, now: Date): 
   return { link, referredBy, challenge: null, ended };
 }
 
-const ACTIVE_BAN = ["pending", "applied", "lift_pending"];
-
 /**
- * Link-to-play's word to the player, from `bans` (spec §7).
+ * Link-to-play's word to the player, from `bans` (spec §7). Called only beside
+ * a LIVE challenge, so "an attempt is open" is given here.
  *
  * ⚠️ Null unless the target's ONLY active ban on a server is `unlinked`: a
  * zone, conduct or hub ban stays after linking, so "start linking to get back
  * on" would be a promise the lift cannot keep. Bans are per server, and this
  * reads every active server (the same set `unlinkDb` walks); with several, any
- * server where the condition holds counts, `lifted` first, since being let on
- * somewhere is the better news.
+ * server where the condition holds counts, `lifted` first, then `will-lift`,
+ * since being let on somewhere is the better news.
  */
 async function linkGateFor(db: Database, dayzId: string, now: Date): Promise<LinkGate> {
   const rows = await db.select({
-    serverId: bans.serverId, reason: bans.reason, status: bans.status, expiresAt: bans.expiresAt, liftedAt: bans.liftedAt,
+    serverId: bans.serverId, reason: bans.reason, status: bans.status, bannedAt: bans.bannedAt,
+    expiresAt: bans.expiresAt, liftedAt: bans.liftedAt,
   }).from(bans).innerJoin(servers, eq(servers.id, bans.serverId))
     .where(and(eq(bans.dayzId, dayzId), eq(servers.active, true)));
   const byServer = new Map<number, typeof rows>();
   for (const r of rows) byServer.set(r.serverId, [...(byServer.get(r.serverId) ?? []), r]);
 
+  let willLift = false;
   let usedNextAt: Date | null = null;
   for (const mine of byServer.values()) {
-    const active = mine.filter((r) => ACTIVE_BAN.includes(r.status) && (r.expiresAt === null || r.expiresAt > now));
+    const active = mine.filter((r) =>
+      (BAN_ACTIVE_STATUSES as readonly string[]).includes(r.status) && (r.expiresAt === null || r.expiresAt > now));
     if (active.some((r) => r.reason !== "unlinked")) continue;
     const lifts = mine.filter((r) => r.reason === "unlinked" && r.liftedAt !== null).map((r) => r.liftedAt!.getTime());
     const last = lifts.length === 0 ? null : Math.max(...lifts);
-    if (last !== null && last + LINK_TO_PLAY_LIFT_MS > now.getTime()) return { kind: "lifted", until: new Date(last + LINK_TO_PLAY_LIFT_MS) };
+    // In force or queued; a lift_pending row is on its way out.
+    const banning = active.filter((r) => r.status === "pending" || r.status === "applied");
+    // ⚠️ Banned again since the last lift (cancelled, then re-banned, then a
+    // new attempt inside the hour): that lift no longer lets them on, so
+    // saying "let back on until …" would be false while they are banned.
+    const rebanned = last !== null && banning.some((r) => r.bannedAt.getTime() > last);
+    if (last !== null && last + LINK_TO_PLAY_LIFT_MS > now.getTime() && !rebanned) {
+      return { kind: "lifted", until: new Date(last + LINK_TO_PLAY_LIFT_MS) };
+    }
     // A lift_pending row has no lifted_at yet (banTick stamps it): say nothing for that gap rather than guess a time.
-    const banned = active.some((r) => r.reason === "unlinked" && r.status !== "lift_pending");
-    if (banned && last !== null && last + LINK_TO_PLAY_LIFT_WINDOW_MS > now.getTime()) {
+    const liftSpent = active.some((r) => r.status === "lift_pending")
+      || (last !== null && last + LINK_TO_PLAY_LIFT_WINDOW_MS > now.getTime());
+    // The same condition the gate lifts on (linkGateAction): banned, no lift in
+    // the window, an attempt live. A pending ban is applied first, then lifted.
+    if (banning.length > 0 && !liftSpent) willLift = true;
+    if (banning.length > 0 && last !== null && last + LINK_TO_PLAY_LIFT_WINDOW_MS > now.getTime()) {
       const at = new Date(last + LINK_TO_PLAY_LIFT_WINDOW_MS);
       if (usedNextAt === null || at < usedNextAt) usedNextAt = at;
     }
   }
+  if (willLift) return { kind: "will-lift" };
   return usedNextAt ? { kind: "lift-used", nextAt: usedNextAt } : null;
 }
 

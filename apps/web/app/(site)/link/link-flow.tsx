@@ -236,7 +236,11 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
         {challenge.gate && (
           <div className="px-4 pt-4 lg:px-5">
             <Refusal label="Back on the server" neutral>
-              {GATE_COPY[challenge.gate.kind](when(new Date(challenge.gate.kind === "lifted" ? challenge.gate.until : challenge.gate.nextAt)))}
+              {GATE_COPY[challenge.gate.kind](
+                challenge.gate.kind === "lifted" ? when(new Date(challenge.gate.until))
+                  : challenge.gate.kind === "lift-used" ? when(new Date(challenge.gate.nextAt))
+                  : "",
+              )}
             </Refusal>
           </div>
         )}
