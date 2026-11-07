@@ -15,7 +15,13 @@ import { handleGuildMemberRemove, type RemoveFromGuild } from "./guild-removal.j
  * ⚠️ HALTS over the cap: if MORE than `max` linked users look absent, nobody
  * is removed and `capped` is true. A handful of leavers is plausible after
  * downtime; hundreds is a bad member read, and the removals are irreversible.
- * At or under the cap, all of them are removed, oldest link first.
+ * At or under the cap, each is CONFIRMED before removal, oldest link first.
+ *
+ * ⚠️ `memberExists` is that confirmation: a REST member fetch per candidate
+ * (`GuildGateway.fetchMemberExists`). A cache can be missing a member who is
+ * still there; only Discord's Unknown Member (false) removes. True keeps the
+ * user, and null (the fetch failed) skips them this pass. The cap still
+ * counts cache misses: it is the cheap alarm, the fetch is the proof.
  *
  * Each removal goes through `handleGuildMemberRemove` (same-guild sentinel
  * below), so it gets the live handler's one deadlock retry and the same
@@ -26,6 +32,7 @@ export async function sweepMissedRemovals(
   opts: {
     ready: boolean;
     isMember: (id: string) => boolean;
+    memberExists: (id: string) => Promise<boolean | null>;
     now: Date;
     max: number;
     remove?: RemoveFromGuild;
@@ -40,6 +47,18 @@ export async function sweepMissedRemovals(
   if (missing.length > opts.max) return { removed: [], capped: true, missing: missing.length };
   const removed: { discordId: string; gamertag: string }[] = [];
   for (const { discordId, gamertag } of missing) {
+    let exists: boolean | null;
+    try {
+      exists = await opts.memberExists(discordId);
+    } catch (err) {
+      console.error(`guild-sweep: confirming ${discordId} failed`, err);
+      exists = null;
+    }
+    if (exists === null) {
+      console.warn(`guild-sweep: could not confirm ${discordId} left; skipped this pass`);
+      continue;
+    }
+    if (exists) continue;   // a cache miss, not a leaver
     try {
       // The guild check is the live handler's concern; the sweep already
       // judged membership against the configured guild's cache.

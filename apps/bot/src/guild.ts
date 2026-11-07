@@ -59,6 +59,13 @@ export interface GuildGateway {
   roleMembers(roleId: string): Set<string>;
   /** Cache: is this user in the guild right now. */
   isMember(userId: string): boolean;
+  /**
+   * REST, never the cache: true if Discord returns the member, false ONLY on
+   * Discord's Unknown Member (10007, or a 404), null on any other error. For
+   * the link sweep, whose removals are irreversible: a cache miss is a
+   * suspicion, this is the confirmation, and "could not ask" is not "gone".
+   */
+  fetchMemberExists(userId: string): Promise<boolean | null>;
   addRole(userId: string, roleId: string): Promise<void>;
   removeRole(userId: string, roleId: string): Promise<void>;
   /** `applyNickname` semantics: never throws, reports the outcome. */
@@ -98,7 +105,7 @@ type RealGuild = {
   };
   members: {
     cache: Map<string, { nickname: string | null }>;
-    fetch(userId?: string): Promise<unknown>;
+    fetch(userId?: string | { user: string; force: boolean }): Promise<unknown>;
     me: { permissions: { has(perm: bigint): boolean } } | null;
   };
 };
@@ -306,6 +313,20 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
 
     isMember(userId) {
       return cachedGuild().members.cache.has(userId);
+    },
+
+    async fetchMemberExists(userId) {
+      try {
+        const guild = await getGuild();
+        // ⚠️ force: a plain fetch(id) answers from the cache when it can, and
+        // the cache is exactly what this call exists to second-guess.
+        await guild.members.fetch({ user: userId, force: true });
+        return true;
+      } catch (err) {
+        if (err instanceof DiscordAPIError && (err.code === 10007 || err.status === 404)) return false;
+        console.error(`guild: member fetch for ${userId} failed`, err);
+        return null;
+      }
     },
 
     async addRole(userId, roleId) {

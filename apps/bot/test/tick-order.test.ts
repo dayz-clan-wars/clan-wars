@@ -52,6 +52,11 @@ describe("enforcement tick wiring (task 10)", () => {
     expect(src).toMatch(/for \(const s of banServers\) \{[\s\S]{0,400}?await runLinkGate\(s\.id, banNow\);[\s\S]{0,200}?await banTick\(/u);
   });
 
+  it("⚠️ the link sweep is gated on LINK_TO_PLAY and confirms by REST before removing", () => {
+    expect(src).toMatch(/if \(cfg\.linkToPlay !== "off" && membersFetched && [\s\S]{0,80}?LINK_SWEEP_INTERVAL_MS\) \{\s*try \{\s*const sw = await sweepMissedRemovals\(/u);
+    expect(src).toMatch(/memberExists: \(id\) => guildGateway\.fetchMemberExists\(id\)/u);
+  });
+
   it("⚠️ the link page's \"within 5 minutes\" is the ban block's interval", () => {
     // GATE_COPY["will-lift"] names the number; the link gate and banTick run
     // beside the reaper on REAPER_INTERVAL_MS. Change one, change both.
