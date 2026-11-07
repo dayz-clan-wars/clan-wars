@@ -1213,9 +1213,9 @@ export async function start(cfg: BotConfig): Promise<void> {
     // reads as "everyone left" — and each candidate is confirmed by a REST
     // member fetch before removal. Hourly (plus once right after the first full
     // fetch, since lastSweepAt starts at 0) so a bad read cannot repeat every
-    // tick. Its own try/catch. ⚠️ Gated on LINK_TO_PLAY like the gate itself:
-    // nothing link-to-play adds runs until the runbook turns it on.
-    if (cfg.linkToPlay !== "off" && membersFetched && Date.now() - lastSweepAt >= LINK_SWEEP_INTERVAL_MS) {
+    // tick. Its own try/catch. ⚠️ Only with LINK_TO_PLAY=on: its removals are
+    // real and irreversible, so `dry` (which must touch nothing) leaves it off.
+    if (cfg.linkToPlay === "on" && membersFetched && Date.now() - lastSweepAt >= LINK_SWEEP_INTERVAL_MS) {
       try {
         const sw = await sweepMissedRemovals(db, {
           ready: membersFetched,

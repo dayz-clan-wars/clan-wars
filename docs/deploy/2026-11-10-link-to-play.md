@@ -73,14 +73,14 @@ Cross-check one gamertag from a "Would ban" post:
 
 Zero rows is correct for an unlinked player. A row means the gate is wrong.
 
-⚠️ `dry` also starts the hourly guild sweep, and the sweep is not a dry run: it removes
-linked users who left the Discord while the bot was down, for real (each one confirmed by
-a Discord member fetch first, at most 5 per pass). Its "Link sweep: removed …" posts land
-in ops beside the "Would …" lines.
+`dry` leaves the hourly guild sweep off: its removals are real, and dry touches nothing.
 
 ## 5. Turn it on
 
-Set `LINK_TO_PLAY=on`, `sudo systemctl restart clan-wars-bot`.
+Set `LINK_TO_PLAY=on`, `sudo systemctl restart clan-wars-bot`. This also starts the hourly
+guild sweep: right after the first full member fetch it removes linked users who left the
+Discord while the bot was down, each confirmed by a Discord member fetch, at most 5 per
+pass, and posts "Link sweep: removed …" to ops.
 
 Watch the first ban:
 
@@ -135,7 +135,7 @@ Run the update's count first inside `begin read only` with the same predicate. �
 `reason = 'unlinked'`: never touch other reasons. `banTick` removes only what each ban
 added, so an entry the owner added by hand stays.
 
-The guild sweep stops with `off` too. While it runs it confirms each missing user with a
-Discord member fetch before removing them, removes at most 5 per pass, and if more than 5
-look missing it removes nobody and posts one ops alert per episode: read that as a bad
-member read, not as mass departure.
+The guild sweep runs only with `on`, so `off` (and `dry`) stop it. While it runs it
+confirms each missing user with a Discord member fetch before removing them, removes at
+most 5 per pass, and if more than 5 look missing it removes nobody and posts one ops alert
+per episode: read that as a bad member read, not as mass departure.
