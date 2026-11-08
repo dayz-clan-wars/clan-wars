@@ -14,7 +14,7 @@ export type DeclareArgs = {
 };
 export type DeclareOutcome =
   | { ok: true; id: number }
-  | { ok: false; reason: "near-edge" | "too-close" | "pole-taken" | "owner-has-base" };
+  | { ok: false; reason: "near-edge" | "moved-back" | "too-close" | "pole-taken" | "owner-has-base" };
 
 export type Declaration = { id: number; poleKey: string; x: string; y: string; z: string; declaredAt: Date; carriedSince: Date | null };
 
@@ -77,6 +77,18 @@ export async function declareTx(tx: Tx, a: DeclareArgs): Promise<DeclareOutcome>
     .where(eq(declarations.serverId, a.serverId))
     .for("update");
 
+  // No moving back (replaces the old move cooldown): a pole this owner
+  // released stays theirs-to-not-take until its release grace runs out, so
+  // nobody can bounce between two poles and keep both private.
+  const [pole] = await tx.select({ graceUntil: poles.graceUntil, byFaction: poles.releasedByFactionId, byDayzId: poles.releasedByDayzId })
+    .from(poles).where(and(eq(poles.serverId, a.serverId), eq(poles.poleKey, a.poleKey)));
+  if (pole && pole.graceUntil > a.at && (
+    ("factionId" in a.owner && pole.byFaction === a.owner.factionId) ||
+    ("dayzId" in a.owner && pole.byDayzId === a.owner.dayzId)
+  )) {
+    return { ok: false, reason: "moved-back" };
+  }
+
   // Exclude a row already sitting on THIS pole (distance 0) from the spacing
   // check — that case is "pole-taken", decided below by the unique index,
   // not "too-close" to itself.
@@ -132,10 +144,10 @@ const ownerWhere = (o: Owner) =>
  */
 export async function releaseTx(tx: Tx, owner: Owner, at: Date): Promise<boolean> {
   const [gone] = await tx.delete(declarations).where(ownerWhere(owner))
-    .returning({ serverId: declarations.serverId, poleKey: declarations.poleKey });
+    .returning({ serverId: declarations.serverId, poleKey: declarations.poleKey, byFaction: declarations.ownerFactionId, byDayzId: declarations.ownerDayzId });
   if (!gone) return false;
   await tx.update(poles)
-    .set({ graceUntil: new Date(at.getTime() + RELEASED_POLE_GRACE_MS) })
+    .set({ graceUntil: new Date(at.getTime() + RELEASED_POLE_GRACE_MS), releasedByFactionId: gone.byFaction, releasedByDayzId: gone.byDayzId })
     .where(and(eq(poles.serverId, gone.serverId), eq(poles.poleKey, gone.poleKey)));
   return true;
 }
@@ -406,4 +418,44 @@ export async function publicPoles(db: Database | Tx, serverId: number, now: Date
 
   return candidates.filter((p) => !declared.some((d) =>
     distance2d({ x: Number(p.x), z: Number(p.z) }, { x: Number(d.x), z: Number(d.z) }) < WATCH_ZONE_RADIUS_M));
+}
+
+/**
+ * True when no earlier `flag.raised` exists on this pole — the raise that
+ * sets the pole's clock (NEW_POLE_MOVE_WINDOW_MS vs NEW_POLE_GRACE_MS).
+ * Ordered by event id, the same order every consumer reads the log in, so
+ * pole-tick and raise-tick agree on which raise was first.
+ */
+export async function isFirstRaise(db: Database | Tx, a: { serverId: number; poleKey: string; eventId: number }): Promise<boolean> {
+  const [earlier] = await db.select({ id: events.id }).from(events).where(and(
+    eq(events.type, "flag.raised"),
+    eq(events.serverId, a.serverId),
+    sql`${events.payload}->>'poleKey' = ${a.poleKey}`,
+    lt(events.id, a.eventId),
+  )).limit(1);
+  return !earlier;
+}
+
+export type BasedRaiser =
+  | { kind: "clan"; factionId: number; poleKey: string }
+  | { kind: "solo"; dayzId: string; poleKey: string };
+
+/**
+ * The base this player already has, if any: their clan's (full members of an
+ * active or dormant clan only, the roster's usual meaning of "member") or
+ * their own solo declaration.
+ */
+export async function basedRaiser(db: Database | Tx, serverId: number, dayzId: string): Promise<BasedRaiser | null> {
+  const [clan] = await db.select({ factionId: declarations.ownerFactionId, poleKey: declarations.poleKey })
+    .from(declarations)
+    .innerJoin(factionMembers, eq(factionMembers.factionId, declarations.ownerFactionId))
+    .where(and(
+      eq(declarations.serverId, serverId),
+      eq(factionMembers.dayzId, dayzId), eq(factionMembers.status, "full"),
+      sql`exists (select 1 from factions f where f.id = ${declarations.ownerFactionId} and f.status in ('active','dormant'))`,
+    ));
+  if (clan?.factionId) return { kind: "clan", factionId: clan.factionId, poleKey: clan.poleKey };
+  const [solo] = await db.select({ poleKey: declarations.poleKey }).from(declarations)
+    .where(and(eq(declarations.serverId, serverId), eq(declarations.ownerDayzId, dayzId)));
+  return solo ? { kind: "solo", dayzId, poleKey: solo.poleKey } : null;
 }

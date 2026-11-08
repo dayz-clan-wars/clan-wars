@@ -8,6 +8,7 @@ export const DECLARE_COPY: Record<DeclareSoloReason, string> = {
   "in-clan": "You are in a clan, so your base is the clan's. Solo declarations are for players outside one.",
   "no-raise": "The server log has not seen you raise a flag at that pole. Raise it, wait for the log to catch up, and try again.",
   "near-edge": `Too close to the map edge. A base has to be at least ${MAP_EDGE_BUFFER_M.toLocaleString("en-US")} m in from every edge of the map.`,
+  "moved-back": `You moved off that pole less than ${days(RELEASED_POLE_GRACE_MS)} ago. You can take it back once that time is up and it has gone public.`,
   "too-close": `Too close to another declared base. No two declared bases sit within ${MIN_BASE_SPACING_M} m of each other — first declared wins. The map cannot show you private bases, so this refusal is your first warning that one is nearby.`,
   "pole-taken": "That pole is already declared by someone else.",
   "owner-has-base": "You already have a declared base. Release it before declaring another.",

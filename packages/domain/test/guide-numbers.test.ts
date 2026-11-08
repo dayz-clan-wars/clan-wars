@@ -13,12 +13,12 @@ import * as R from "../src/rules.js";
 const LABELS = [
   "Link: emotes to perform", "Link: time limit", "Unlinked gamertag: play time before a ban", "Starting a link lifts the ban for",
   "Flags in the pool", "Ceremony: linked players required", "Ceremony: window", "Claim window after ceremony", "Activation window after claim", "Clan name length", "Clan tag length",
-  "Declarations per player", "New pole grace before public", "Released pole grace before public", "Public base despawns after (no flag raise)", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
+  "Declarations per player", "New pole grace before public", "New pole raised by someone who already has a base: move there within", "Released pole grace before public", "Public base despawns after (no flag raise)", "Points for lowering a public base's flag (once per base) / lost for raising one", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
   "Same clan raiding the same victim counts once per", "Raid window (base damage on)",
   "A raid pays: an established clan's starting value", "Added to your value by each raid you land", "That bonus fades to nothing over", "Each time you are raided your value halves, recovering over", "A clan is worth 0 for its first", "Points multiplier: someone from the clan is online", "Points multiplier: nobody is online",
   "Flag-down clock", "Inactivity → dormant", "Dormant → disbanded",
   "Weekly weapon kit lasts (days)", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "After a wipe: a new pole this close to your old base becomes your base", "Player board: minimum kills for K/D",
-  "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rebrand cooldown", "New flag: raise it within", "Old name / tag held after disband", "Base move: confirm window", "Base move: cooldown between moves", "Vault code length",
+  "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rebrand cooldown", "New flag: raise it within", "Old name / tag held after disband", "Base move: confirm window", "Vault code length",
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
   "Fast travel points (sheds)", "Hub destinations",
@@ -28,7 +28,7 @@ const LABELS = [
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 69 rows the appendix holds, in order", () => {
+  it("has the 70 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {

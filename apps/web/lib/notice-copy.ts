@@ -1,4 +1,7 @@
-import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
+import { FLAG_DOWN_MS, DORMANT_AFTER_MS, NEW_POLE_MOVE_WINDOW_MS, PUBLIC_BASE_BOUNTY_POINTS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
+
+/** A public-base notice's frozen points, or the rule's number when the payload has none. */
+const bountyPoints = (v: unknown): number => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.abs(Number(v)) : PUBLIC_BASE_BOUNTY_POINTS);
 import type { NoticePayload } from "@factions/roster";
 import { flagLabel, achievementSummaryLine, raidScoredCopy } from "@factions/copy";
 
@@ -291,6 +294,18 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   rebind_proposed: { group: "Rebind", render: (p) => ({
     kicker: "Rebind", title: "A move was proposed for your pole",
     body: `${who(p.gamertag)} raised your flag at a new pole. A leader has to confirm or refuse it before it lapses.` }) },
+  public_bounty: { group: "Base", render: (p) => ({
+    kicker: "Public base", title: `+${bountyPoints(p.points)} points`,
+    body: `${who(p.gamertag)} took down the flag on a public base.` }) },
+  public_penalty: { group: "Base", render: (p) => ({
+    kicker: "Public base", title: `−${bountyPoints(p.points)} points`,
+    body: `${who(p.gamertag)} raised a flag on a public base. Declare a base to keep it, or let it go.` }) },
+  new_pole: { group: "Rebind", render: (p) => ({
+    kicker: "Rebind", title: "A flag went up at a new pole",
+    body: `${who(p.gamertag)} raised a flag at a new pole. Move the base there within ${NEW_POLE_MOVE_WINDOW_MS / 3_600_000} hours of the raise, or the pole goes public.` }) },
+  solo_new_pole: { group: "Rebind", render: () => ({
+    kicker: "Base", title: "You raised a flag at a new pole",
+    body: `Move your base there within ${NEW_POLE_MOVE_WINDOW_MS / 3_600_000} hours of the raise, or the pole goes public. Release your current base and declare the new one on this page.` }) },
   rebind_confirmed: { group: "Rebind", render: () => ({
     kicker: "Rebind", title: "Your base moved",
     body: "Supplies follow at the next restart. The old pole goes public after the grace period." }) },

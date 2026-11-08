@@ -1,6 +1,6 @@
 import {
   ACTIVATION_WINDOW_MS, MAP_EDGE_BUFFER_M, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, FLAG_CHANGE_WINDOW_MS, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
-  PENDING_EXPIRY_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS,
+  PENDING_EXPIRY_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS,
 } from "@factions/domain";
 import type {
   ActorRefusal, InviteOutcome, AcceptInviteOutcome, RequestJoinOutcome, DecideRequestOutcome, LeaveOutcome, KickOutcome,
@@ -130,10 +130,11 @@ const SUPPLIES: Record<SuppliesOutcome | ActorRefusal, string> = {
   off: "Build supplies are off. From the next restart, only your clan flags spawn at your pole.",
   "not-permitted": "Only an officer or the leader can turn the build supplies off or on.",
 };
-const REBIND: Record<"ok" | "refused" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
+const REBIND: Record<"ok" | "refused" | "moved-back" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
   ...REFUSAL,
   ok: "Moved. Your base is the new pole; the old one goes public after its grace period.",
-  refused: `Your clan moved its base within the last ${days(REBIND_COOLDOWN_MS)}, or has no declared base to move.`,
+  refused: "Your clan has no declared base to move, or the move could not be made. Reload and try again.",
+  "moved-back": `You moved off that pole less than ${days(RELEASED_POLE_GRACE_MS)} ago. You can take it back once that time is up and it has gone public.`,
   "near-edge": `Too close to the map edge. A base has to be at least ${MAP_EDGE_BUFFER_M.toLocaleString("en-US")} m in from every edge of the map.`,
   "too-close": `Too close to another declared base — no two bases sit within ${MIN_BASE_SPACING_M} m of each other.`,
   "no-candidate": "No member has raised your flag at that pole recently. Raise it again and come back.",

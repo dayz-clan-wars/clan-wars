@@ -27,7 +27,9 @@ describe("rules", () => {
     expect(R.FAILED_VOTE_COOLDOWN_MS).toBe(14 * DAY);
     expect(R.RENAME_COOLDOWN_MS).toBe(30 * DAY);
     expect(R.REBIND_CONFIRM_MS).toBe(24 * HOUR);
-    expect(R.REBIND_COOLDOWN_MS).toBe(7 * DAY);
+    expect(R.NEW_POLE_MOVE_WINDOW_MS).toBe(24 * HOUR);
+    expect(R.MAP_EDGE_BUFFER_M).toBe(1000);
+    expect(R.PUBLIC_BASE_DESPAWN_MS).toBe(7 * DAY);
     expect(R.BAD_DOG_SURVIVE_MS).toBe(10 * MIN);
     expect(R.GUEST_PASS_MS).toBe(24 * HOUR);
     expect(R.POSITION_FIX_MS).toBe(5 * MIN);
@@ -57,11 +59,6 @@ describe("rules", () => {
     expect(R.VOTE_THRESHOLD).toEqual({ num: 2, den: 3 });
     expect(R.HUB_POSITION).toEqual({ x: 100, z: 93 });
     expect(R.RAID_WINDOW).toEqual({ openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 });
-  });
-
-  it("⚠️ keeps the released grace strictly shorter than the rebind cooldown", () => {
-    // Spec §4.2: equal or longer lets a clan ping-pong two private bases.
-    expect(R.RELEASED_POLE_GRACE_MS).toBeLessThan(R.REBIND_COOLDOWN_MS);
   });
 
   it("⚠️ keeps the watch zone at half the spacing so zones never overlap", () => {

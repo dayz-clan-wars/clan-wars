@@ -13,8 +13,9 @@
 </ul>
 <h2>Bases</h2><ul>
 <li>Every flagpole is a base. Declared is private; everything else is public, with the flag flying there.</li>
+<li>Lower a public base's flag: +{{PUBLIC_BASE_BOUNTY_POINTS}} for your clan, once per base. Raise a flag on one: −{{PUBLIC_BASE_BOUNTY_POINTS}}, every time. Both count toward the week and the season.</li>
 <li>One declaration per player: your clan's base, or one solo base.</li>
-<li>New poles get {{NEW_POLE_GRACE_MS|days}} before going public; released poles get {{RELEASED_POLE_GRACE_MS|n}}.</li>
+<li>New poles get {{NEW_POLE_GRACE_MS|days}} before going public, or {{NEW_POLE_MOVE_WINDOW_MS|hours}} if whoever raised the first flag there already has a base; released poles get {{RELEASED_POLE_GRACE_MS|n}}.</li>
 <li>No two declared bases within {{MIN_BASE_SPACING_M|m}}. First declared wins.</li>
 <li>A solo base becomes a clan base by ceremony, only if the declarant takes part.</li>
 <li>Joining a clan releases your solo declaration.</li>
@@ -52,7 +53,7 @@
 <li>Leader silent {{LEADER_SILENT_MS|days}}: an officer can claim; the leader has {{SUCCESSION_WINDOW_MS|hours}} to show up in game.</li>
 <li>No-confidence vote: {{VOTE_LENGTH_MS|hours}}, two-thirds of all full members, ex-leader stays as officer, {{FAILED_VOTE_COOLDOWN_MS|days}} between failed votes. Kicks and transfers frozen while a vote is open.</li>
 <li>Rebrand (name, tag or flag) once per {{RENAME_COOLDOWN_MS|days}}. A rebrand frees the old name, tag and flag at once; a disbanded clan's name and tag are held until season end.</li>
-<li>Moving your base: raise your own flag at a free pole, leader confirms within {{REBIND_CONFIRM_MS|hours}}, {{REBIND_COOLDOWN_MS|days}} between moves.</li>
+<li>Moving your base: any flag at a free pole, leader confirms within {{REBIND_CONFIRM_MS|hours}}, no cooldown. No moving back to the old pole for {{RELEASED_POLE_GRACE_MS|days}}.</li>
 <li>The vault never posts a code to Discord. Departed members' locks are flagged until rotated.</li>
 </ul>
 <h2>Discord</h2><ul>

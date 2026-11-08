@@ -24,7 +24,7 @@ export type WarLogKind = (typeof WAR_LOG_KINDS)[number];
  */
 export const CLAN_NOTICE_KINDS = [
   "flag_down", "defended", "dormant_raided", "dormant_inactive", "revived", "disband_warning",
-  "non_member_raise", "colors_elsewhere", "rebind_proposed", "rebind_confirmed",
+  "non_member_raise", "colors_elsewhere", "rebind_proposed", "rebind_confirmed", "new_pole", "solo_new_pole",
   "joined", "became_full", "left", "kicked", "promoted", "demoted", "transferred", "renamed",
   "flag_change_started", "flag_changed", "flag_change_lapsed",
   "invited", "request_accepted", "request_declined", "pending_expired", "solo_non_member_raise", "solo_lapsed",
@@ -33,7 +33,7 @@ export const CLAN_NOTICE_KINDS = [
   "vote_opened", "vote_passed", "vote_failed", "codes_rotated", "guest", "achievement", "achievement_summary",
   "zone_warning", "incident_ready", "solo_incident_ready", "ban_applied", "booster_kit_unchosen", "award_granted", "award_received", "award_given",
   "bounty_placed", "bounty_expired", "bounty_revoked", "supplies_toggled",
-  "flag_lowered_away", "raid_scored",
+  "flag_lowered_away", "raid_scored", "public_bounty", "public_penalty",
 ] as const;
 export type ClanNoticeKind = (typeof CLAN_NOTICE_KINDS)[number];
 export const NOTICE_TARGETS = ["channel", "dm"] as const;

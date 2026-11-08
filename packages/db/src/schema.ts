@@ -198,6 +198,15 @@ export const poles = pgTable("poles", {
    * public iff flag_raised, no declarations row, and grace_until < now.
    */
   graceUntil: timestamp("grace_until", { withTimezone: true }).notNull(),
+  /**
+   * Who last released a declaration on this pole (the clan, or the solo's
+   * DayZ id). While `grace_until` is still ahead, that owner may not declare
+   * it again — the no-moving-back rule that replaced the move cooldown, so a
+   * clan cannot bounce between two poles and keep both private.
+   * Plain columns, no FK: a disbanded clan's row may be gone.
+   */
+  releasedByFactionId: integer("released_by_faction_id"),
+  releasedByDayzId: text("released_by_dayz_id"),
 }, (t) => ({
   uniqPole: uniqueIndex("poles_tenant_key_uniq").on(t.serverId, t.map, t.poleKey),
 }));
@@ -983,6 +992,36 @@ export const seasonStandings = pgTable("season_standings", {
   timesRaided: integer("times_raided").notNull().default(0),
   defenses: integer("defenses").notNull().default(0),
 }, (t) => ({ uniq: uniqueIndex("season_standings_uniq").on(t.seasonId, t.factionId) }));
+
+/**
+ * Points for public bases (2026-11-08): +PUBLIC_BASE_BOUNTY_POINTS to a clan
+ * whose full member lowers the flag on a public base (once per base per
+ * clan, the partial unique index), and −PUBLIC_BASE_BOUNTY_POINTS for every
+ * raise of a flag on one. A ledger beside `raids`, never folded into it, so
+ * the season rescore (which rewrites raid points) cannot erase it;
+ * `rebuildStandingsTx` and `weekTopThree` both add it in.
+ * ⚠️ `pole_key` is a coordinate: never on a public read model.
+ */
+export const publicBaseBounties = pgTable("public_base_bounties", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  poleKey: text("pole_key").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  /** `claimed` (a lower, positive points) or `penalty` (a raise, negative). */
+  kind: text("kind").notNull(),
+  points: integer("points").notNull(),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  /** The scoring week the event fell in (`scoringWeekStartOf`), as on `raids`. */
+  weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniqEvent: uniqueIndex("public_base_bounties_event_uniq").on(t.eventId),
+  oncePerBase: uniqueIndex("public_base_bounties_once_uniq").on(t.factionId, t.serverId, t.poleKey).where(sql`${t.kind} = 'claimed'`),
+  bySeasonWeek: index("public_base_bounties_season_week_idx").on(t.seasonId, t.weekStart),
+  kindValid: check("public_base_bounties_kind_valid", sql`${t.kind} in ('claimed','penalty')`),
+}));
 
 /** One faction's rank in the weekly @Alpha top 3 (spec §4.8, §7). Silence writes no row. */
 export const alphaWeeks = pgTable("alpha_weeks", {

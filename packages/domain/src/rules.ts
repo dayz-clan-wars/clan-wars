@@ -164,7 +164,19 @@ export const VOTE_THRESHOLD = { num: 2, den: 3 } as const;
 export const FAILED_VOTE_COOLDOWN_MS = 14 * DAY;
 export const RENAME_COOLDOWN_MS = 30 * DAY;
 export const REBIND_CONFIRM_MS = 24 * HOUR;
-export const REBIND_COOLDOWN_MS = 7 * DAY;
+/**
+ * A first raise at a new pole by a player who already has a declared base
+ * (their clan's, or their own solo base) gives that pole this long before it
+ * goes public, instead of NEW_POLE_GRACE_MS: move the base there, or it is
+ * published. Set once, by the pole's FIRST raise; later raises never move it.
+ */
+export const NEW_POLE_MOVE_WINDOW_MS = 24 * HOUR;
+/**
+ * A clan earns this for lowering the flag on a public base (once per base per
+ * clan) and loses it for every raise of a flag on one. Counts toward the
+ * season total and the weekly Alpha ranking.
+ */
+export const PUBLIC_BASE_BOUNTY_POINTS = 50;
 /** A vault code is 4 to 6 digits: a 4-dial combination lock takes 4, a digital code lock 4 to 6. */
 export const VAULT_CODE_DIGITS = { min: 4, max: 6 } as const;
 

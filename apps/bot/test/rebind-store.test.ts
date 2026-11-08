@@ -166,10 +166,11 @@ describe("PgRebindStore", () => {
     expect(out.map((r) => r.poleKey)).not.toContain(P2_KEY);
   });
 
-  it("ignores a raise of a different texture", async () => {
+  it("finds a member's raise of ANY flag, not just the clan's own", async () => {
     await raiseAt({ poleKey: "9.00:8.00:7.00", texture: "Flag_Wolf" });
+    await raiseAt({ poleKey: "9.50:8.00:7.00", texture: "Flag_White" });
     const out = await store.qualifyingRaises(await target(), ago(3_600_000));
-    expect(out.map((r) => r.poleKey)).not.toContain("9.00:8.00:7.00");
+    expect(out.map((r) => r.poleKey)).toEqual(expect.arrayContaining(["9.00:8.00:7.00", "9.50:8.00:7.00"]));
   });
 
   it("ignores a raise at a pole another declaration already owns", async () => {
@@ -205,7 +206,7 @@ describe("PgRebindStore", () => {
     expectedPoleKey: P1_KEY,
     poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
     evidenceEventId: p2EventId,
-    at: now, notBefore: ago(604_800_000),
+    at: now,
     ...over,
   });
 
@@ -258,9 +259,23 @@ describe("PgRebindStore", () => {
     expect(await store.rebind(args({ leaderDiscordId: "someone-else" }))).toBe("refused");
   });
 
-  it("refuses inside the cooldown", async () => {
+  it("has no cooldown: a clan that just moved can move again", async () => {
     await db.update(factions).set({ reboundAt: ago(1000) }).where(eq(factions.id, factionId));
-    expect(await store.rebind(args())).toBe("refused");
+    expect(await store.rebind(args())).toBe("ok");
+  });
+
+  it("⚠️ no moving back: the pole the clan just left is refused and off the menu until its grace runs out", async () => {
+    expect(await store.rebind(args())).toBe("ok");
+    const [back] = await raiseAt({ poleKey: P1_KEY, occurredAt: now });
+    const raises = await store.qualifyingRaises(await target(), ago(3_600_000), now);
+    expect(raises.map((r) => r.poleKey)).not.toContain(P1_KEY);
+    expect(await store.rebind(args({ expectedPoleKey: P2_KEY, poleKey: P1_KEY, x: P1.x, y: P1.y, z: P1.z, evidenceEventId: back!.id, at: new Date(now.getTime() + 1000) })))
+      .toBe("moved-back");
+    expect(await declarationForFaction(db, factionId)).toMatchObject({ poleKey: P2_KEY });
+    // Once the old pole's grace is over it can be theirs again.
+    const later = new Date(now.getTime() + RELEASED_POLE_GRACE_MS + 1000);
+    expect(await store.rebind(args({ expectedPoleKey: P2_KEY, poleKey: P1_KEY, x: P1.x, y: P1.y, z: P1.z, evidenceEventId: back!.id, at: later })))
+      .toBe("ok");
   });
 
   it("⚠️ refuses when the pole moved since the candidate was read", async () => {
@@ -354,7 +369,7 @@ describe("PgRebindStore", () => {
         expectedPoleKey: P3_KEY,
         poleKey: P4_KEY, x: P4.x, y: P4.y, z: P4.z,
         evidenceEventId: wolfTarget!.id,
-        at: now, notBefore: ago(604_800_000),
+        at: now,
       }),
     ]);
     await new Promise((r) => setTimeout(r, 300));

@@ -115,7 +115,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
 
@@ -137,7 +136,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
 
@@ -150,7 +148,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
     expect((await events()).map((r) => r.kind)).toEqual(["rebound"]);
@@ -160,7 +157,6 @@ describe("identity changes write feed events", () => {
     expect(await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: "somewhere-else",
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     })).toBe("refused");
     expect(await events()).toHaveLength(0);
   });

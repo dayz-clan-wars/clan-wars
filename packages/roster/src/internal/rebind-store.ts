@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, events, declarations } from "@factions/db";
+import { factions, factionMembers, events, declarations, poles } from "@factions/db";
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { leaderIs } from "./roster-store";
 import type { QualifyingRaise } from "./rebind";
@@ -28,7 +28,7 @@ const REBINDABLE: string[] = ["active", "dormant"];
  * gets a decision rather than a generic throw.
  */
 class RebindAbort extends Error {
-  constructor(readonly outcome: "refused" | "near-edge" | "too-close") { super(outcome); }
+  constructor(readonly outcome: "refused" | "moved-back" | "near-edge" | "too-close") { super(outcome); }
 }
 
 /** The faction fields a rebind decision needs. */
@@ -56,14 +56,12 @@ export type RebindArgs = {
   /** The `flag.raised` event that named this pole — declareTx's evidence. */
   evidenceEventId: number;
   at: Date;
-  /** `at - REBIND_COOLDOWN_MS`. A rebind is allowed when rebound_at <= this. */
-  notBefore: Date;
 };
 
 export interface RebindStore {
   factionFor(factionId: number): Promise<RebindTarget | null>;
-  qualifyingRaises(faction: RebindTarget, since: Date): Promise<QualifyingRaise[]>;
-  rebind(a: RebindArgs): Promise<"ok" | "refused" | "near-edge" | "too-close">;
+  qualifyingRaises(faction: RebindTarget, since: Date, now?: Date): Promise<QualifyingRaise[]>;
+  rebind(a: RebindArgs): Promise<"ok" | "refused" | "moved-back" | "near-edge" | "too-close">;
 }
 
 export class PgRebindStore implements RebindStore {
@@ -97,7 +95,7 @@ export class PgRebindStore implements RebindStore {
    * equality, so that index cannot be walked. With a one-hour window that is
    * fine; do not widen the window without re-checking the plan.
    */
-  async qualifyingRaises(faction: RebindTarget, since: Date): Promise<QualifyingRaise[]> {
+  async qualifyingRaises(faction: RebindTarget, since: Date, now: Date = new Date()): Promise<QualifyingRaise[]> {
     const poleKey = sql<string>`${events.payload}->>'poleKey'`;
     const dayzId = sql<string>`${events.payload}->>'dayzId'`;
 
@@ -114,9 +112,8 @@ export class PgRebindStore implements RebindStore {
       eq(events.type, "flag.raised"),
       eq(events.serverId, faction.serverId),
       gte(events.occurredAt, since),
-      // The faction's OWN colours. A rebind is planting your flag somewhere
-      // new, not founding something, so Flag_White is not involved.
-      sql`${events.payload}->>'texture' = ${faction.texture}`,
+      // Any flag. A full member's raise names the pole whatever colours went
+      // up; the clan's own flag follows in the supply kit once it moves.
       // Never the pole it already holds — see selectCandidates' comment.
       // ⚠️ Conditional: `faction.poleKey` is null only when the faction has
       // no declaration at all, which REBINDABLE factions never do in
@@ -139,6 +136,14 @@ export class PgRebindStore implements RebindStore {
       sql`not exists (select 1 from ${declarations} d
                       where d.server_id = ${faction.serverId}
                         and d.pole_key = ${events.payload}->>'poleKey')`,
+      // No moving back: a pole this clan released is not a candidate while
+      // its grace is still running (declareTx refuses it anyway; this keeps
+      // it off the leader's menu).
+      sql`not exists (select 1 from ${poles} pl
+                      where pl.server_id = ${faction.serverId}
+                        and pl.pole_key = ${events.payload}->>'poleKey'
+                        and pl.released_by_faction_id = ${faction.id}
+                        and pl.grace_until > ${now.toISOString()}::timestamptz)`,
     ));
 
     // ⚠️ jsonb text extraction yields strings. Without Number() the
@@ -159,7 +164,7 @@ export class PgRebindStore implements RebindStore {
    * Move the binding, in one guarded statement.
    *
    * ⚠️ Every precondition rides in the WHERE clause rather than a read before
-   * the write: leadership, status, the cooldown, and the pole the candidate
+   * the write: leadership, status, and the pole the candidate
    * list was built against. Two leaders confirming two different candidates
    * concurrently must produce one move and one refusal — a read-then-write
    * would produce two moves, and the second would silently overwrite the first.
@@ -178,7 +183,7 @@ export class PgRebindStore implements RebindStore {
    * `declareTx`/`releaseTx` both assume the caller already holds `factions`
    * if it holds anything.
    */
-  async rebind(a: RebindArgs): Promise<"ok" | "refused" | "near-edge" | "too-close"> {
+  async rebind(a: RebindArgs): Promise<"ok" | "refused" | "moved-back" | "near-edge" | "too-close"> {
     return this.db.transaction(async (tx) => {
       // Read before the update overwrites it, the way `rename` reads the
       // previous name. This is a plain SELECT on the primary key that the
@@ -194,7 +199,6 @@ export class PgRebindStore implements RebindStore {
           eq(factions.id, a.factionId),
           leaderIs(a.factionId, a.leaderDiscordId),
           inArray(factions.status, REBINDABLE),
-          or(isNull(factions.reboundAt), lte(factions.reboundAt, a.notBefore)),
           // Optimistic concurrency, now against the declaration the
           // candidates were built from — the pole must still be the one the
           // candidate list was computed against.
@@ -227,7 +231,7 @@ export class PgRebindStore implements RebindStore {
       // for the clan to already own. pole-taken means another declarer won
       // the target pole in the window between qualifyingRaises and this
       // call — reported the same as any other refusal.
-      if (!declared.ok) throw new RebindAbort(declared.reason === "too-close" || declared.reason === "near-edge" ? declared.reason : "refused");
+      if (!declared.ok) throw new RebindAbort(declared.reason === "too-close" || declared.reason === "near-edge" || declared.reason === "moved-back" ? declared.reason : "refused");
 
       const actor = await actorGamertagTx(tx, a.leaderDiscordId);
 

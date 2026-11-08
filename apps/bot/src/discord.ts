@@ -47,6 +47,7 @@ import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
 import { raidTick } from "./raid-tick.js";
 import { raiseTick } from "./raise-tick.js";
+import { publicBountyTick } from "./public-bounty-tick.js";
 import { flagHoldTick } from "./flag-hold-tick.js";
 import { weekTick } from "./week-tick.js";
 import { payRaidAwards } from "./raid-award.js";
@@ -1362,6 +1363,16 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       console.error("raise tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, and before week-tick: the week close ranks on
+    // raid points PLUS public-base bounties, so a bounty must be in before
+    // the week it fell in is closed.
+    try {
+      const b = await publicBountyTick(db);
+      if (b.claimed > 0 || b.penalties > 0) console.log(`public bases: ${b.claimed} bounties, ${b.penalties} penalties`);
+    } catch (err) {
+      console.error("public bounty tick failed", err);
     }
 
     // ⚠️ Right after raiseTick, in its own try/catch: it lapses a pending

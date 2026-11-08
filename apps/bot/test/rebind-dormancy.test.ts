@@ -115,7 +115,7 @@ describe("rebind and the dormancy clock", () => {
       expectedPoleKey: target.poleKey!,
       poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
       evidenceEventId: ev!.id,
-      at: now, notBefore: ago(604_800_000),
+      at: now,
     })).toBe("ok");
 
     const clock = await clockFor(factionId);
@@ -133,7 +133,7 @@ describe("rebind and the dormancy clock", () => {
       expectedPoleKey: target.poleKey!,
       poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
       evidenceEventId: ev!.id,
-      at: now, notBefore: ago(604_800_000),
+      at: now,
     });
 
     const clock = await clockFor(factionId);
@@ -154,7 +154,7 @@ describe("rebind and the dormancy clock", () => {
       expectedPoleKey: target.poleKey!,
       poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
       evidenceEventId: ev!.id,
-      at: now, notBefore: ago(604_800_000),
+      at: now,
     });
 
     const clock = await clockFor(factionId);

@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { factions, identityLinks, factionMembers } from "@factions/db";
 import {
-  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, HOLDING_STATUSES, PENDING_EXPIRY_MS, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS,
+  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, HOLDING_STATUSES, PENDING_EXPIRY_MS, REBIND_CONFIRM_MS,
   RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS, isClaimableFlag,
 } from "@factions/domain";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -174,19 +174,19 @@ export async function claimCeremonyDb(db: Database, now: Date, discordId: string
  * with, so the freshness filter inside `selectCandidates` does not silently
  * re-narrow the 24 h the site promises.
  */
-export async function confirmRebindDb(db: Database, now: Date, actorDiscordId: string, poleKey: string): Promise<"ok" | "refused" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal> {
+export async function confirmRebindDb(db: Database, now: Date, actorDiscordId: string, poleKey: string): Promise<"ok" | "refused" | "moved-back" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return a;
   if (a.role !== "leader") return "not-leader";
   const store = new PgRebindStore(db);
   const clan = await store.factionFor(a.factionId);
   if (!clan || clan.poleKey === null) return "refused";
-  const raises = await store.qualifyingRaises(clan, new Date(now.getTime() - REBIND_CONFIRM_MS));
+  const raises = await store.qualifyingRaises(clan, new Date(now.getTime() - REBIND_CONFIRM_MS), now);
   const candidate = selectCandidates(raises, { currentPoleKey: clan.poleKey, now, windowMs: REBIND_CONFIRM_MS }).find((c) => c.poleKey === poleKey);
   if (!candidate) return "no-candidate";
   return store.rebind({
     factionId: a.factionId, leaderDiscordId: actorDiscordId, expectedPoleKey: clan.poleKey,
     poleKey: candidate.poleKey, x: candidate.x, y: candidate.y, z: candidate.z, evidenceEventId: candidate.eventId,
-    at: now, notBefore: new Date(now.getTime() - REBIND_COOLDOWN_MS),
+    at: now,
   });
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { clanFor } from "@factions/roster";
-import { GUEST_PASS_MS, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
+import { GUEST_PASS_MS, REBIND_CONFIRM_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
@@ -115,9 +115,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </PanelBody>
             </Panel>
 
-            <Panel num="06" title="Move the base" aside={`one move per ${days(REBIND_COOLDOWN_MS)}`}>
+            <Panel num="06" title="Move the base" aside={`within ${hours(REBIND_CONFIRM_MS)}`}>
               <PanelBody>
-                <p className="text-sm leading-relaxed text-ink-2">When a member raises your flag at another pole, it appears here for {hours(REBIND_CONFIRM_MS)}. Confirming moves the base; the old pole goes public after {days(RELEASED_POLE_GRACE_MS)}.</p>
+                <p className="text-sm leading-relaxed text-ink-2">When a member raises any flag at a pole nobody holds, it appears here for {hours(REBIND_CONFIRM_MS)}. A new pole goes public after that unless you move. Confirming moves the base and its supplies; the old pole goes public after {days(RELEASED_POLE_GRACE_MS)}, and you cannot move back to it until then.</p>
                 {rebindCandidates.length === 0 && <p className="mt-2 text-sm text-ink-2">No recent raise elsewhere.</p>}
               </PanelBody>
               {rebindCandidates.length > 0 && (
@@ -125,7 +125,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   {rebindCandidates.map((c) => (
                     <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
                       <span>raised by <span className="font-mono">{c.by}</span> {ago(c.raisedAt)}</span>
-                      {/* M6: moving starts a cooldown and releases the old pole — two-press, the same weight as Release on /base. The pole key stays in a hidden field, never rendered. */}
+                      {/* M6: moving releases the old pole — two-press, the same weight as Release on /base. The pole key stays in a hidden field, never rendered. */}
                       <RowAction action="/api/clan/rebind" fields={{ poleKey: c.poleKey }} who={`(raised by ${c.by})`} style={btnPrimary} confirm="Press again to move">Move here</RowAction>
                     </li>
                   ))}
