@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Raid breakdowns.** Every raid your clan lands now posts a breakdown in your clan channel and in each member's DMs. It shows what the other clan was worth and why, whether anyone from their clan was online, the points you scored, and how your price and theirs moved.
+
+### Changed
+
+- **Only active clans score raids.** A dormant clan can still raid, and the raid still counts: it raises your price with heat, so you come back as a bigger target once your flag is up again. It just pays 0 points until you raise your flag. Raids from before this change keep their points.
+
 ## [2.18.0] - 2026-11-07
 
 ### Added

@@ -300,3 +300,38 @@ describe("achievement_summary", () => {
     expect(render({})).toBe("You already hold some of the new achievements.");
   });
 });
+
+describe("raid_scored", () => {
+  const p = {
+    gamertag: "Wolfie", raiderClan: "Iron Wolves", raiderTag: "WOLF", victimClan: "Bears", victimTag: "BEAR",
+    online: false, mult: 0.75, victimValue: 240, victimBase: 100, victimHeat: 140, victimHitPct: 100, victimNewUntil: null,
+    victimValueAfter: 120, raiderValueBefore: 150, raiderValueAfter: 200, raiderNewUntil: null, fullPrice: 180,
+  };
+  const render = (payload: Record<string, string | number | boolean | null>, target: "channel" | "dm") =>
+    noticeText({ kind: "raid_scored", target, occurredAt: now, payload }, site, dormantAfterMs);
+
+  it("an active raider's channel line spells out the price, the multiplier and both values", () => {
+    expect(render({ ...p, raiderStatus: "active", points: 180 }, "channel")).toBe([
+      `⚔️ [Wolfie](<${site}/players/Wolfie>) raided **[Bears](<${site}/clans/BEAR>)** [BEAR] for **180 points**.`,
+      "They were worth **240**: base 100, +140 heat from raids they've landed lately. Nobody from their clan was online, so the raid pays ×0.75: 240 × 0.75 = **180 points**.",
+      "Your value went from 150 to **200**. Every raid you land adds +50, fading over 14 days.",
+      "Their value dropped from 240 to 120. Being raided halves a clan's value, and it recovers over 7 days.",
+    ].join("\n"));
+  });
+
+  it("a dormant raider's DM names its clan, says it scored nothing and why, and that its value still rose", () => {
+    const text = render({ ...p, raiderStatus: "dormant", points: 0 }, "dm");
+    expect(text).toMatch(/^⚔️ \*\*\[Iron Wolves\]/u);
+    expect(text).toContain("**No points**: your clan is dormant, and only active clans score.");
+    expect(text).toContain("An active clan would have scored 180 points.");
+    expect(text).toContain("Your value went from 150 to **200**.");
+    expect(text).toContain("Raise your flag and you're back on the board at your new price.");
+  });
+
+  it("a raid on a new clan says it paid nothing and when the victim starts counting", () => {
+    const text = render({ ...p, raiderStatus: "active", points: 0, victimNewUntil: "2026-11-12T00:00:00.000Z" }, "channel");
+    expect(text).toContain("They're a new clan, so they're worth 0 until <t:1794441600:F> and the raid pays nothing.");
+    expect(text).not.toContain("×");
+  });
+});
+

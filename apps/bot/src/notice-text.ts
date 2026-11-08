@@ -1,7 +1,7 @@
 import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, FLAG_CHANGE_WINDOW_MS, timeLeftText } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
-import { rel, at, atRel, flagLabel, achievementSummaryLine } from "@factions/copy";
+import { rel, at, atRel, flagLabel, achievementSummaryLine, raidScoredCopy } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
 
 const DAY_MS = 86_400_000;
@@ -139,6 +139,16 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   flag_lowered_away: (p, ctx) => {
     const of = p.raiderClan ? ` of ${p.raiderClan}` : "";
     return `🚩 Your flag away from base was lowered by ${person(p.gamertag, ctx.site)}${of}. It counts as a raid, but it doesn't touch your base — no clock, crate unchanged.`;
+  },
+  // The raiding clan's breakdown (2026-11-08), to its channel and every full
+  // member's DM. The sentences are @factions/copy's, which the web's
+  // notice-copy.ts renders too. A DM carries no channel context, so it names
+  // the reader's clan first.
+  raid_scored: (p, ctx) => {
+    const victim = p.victimTag ? clanLink(ctx.site, String(p.victimTag), String(p.victimClan ?? p.victimTag)) : `**${p.victimClan ?? "a clan"}**`;
+    const c = raidScoredCopy(p, { lowerer: person(p.gamertag, ctx.site), victim, date: atToken, bold: (x) => `**${x}**` });
+    const clan = ctx.target === "dm" && p.raiderTag ? `${clanLink(ctx.site, String(p.raiderTag), String(p.raiderClan ?? p.raiderTag))} · ` : "";
+    return [`⚔️ ${clan}${c.title}`, c.scoring, c.yourValue, c.theirValue].filter(Boolean).join("\n");
   },
   defended: (p, ctx) => `🛡️ ${person(p.gamertag, ctx.site)} raised the flag. Defended — ${duration(Number(p.durationSeconds))} under siege. Supplies resume at next restart.`,
   // ⚠️ RAID_DEDUP_MS, not a typed "24 hours" — see the task-9 report for why

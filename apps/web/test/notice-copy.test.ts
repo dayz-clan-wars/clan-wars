@@ -135,6 +135,20 @@ describe("notice copy", () => {
     expect(noticeCopy("flag_lowered_away", { gamertag: "Ada", raiderClan: null }).body).toMatch(/^Lowered by Ada\. /u);
   });
 
+  it("raid_scored renders the shared breakdown as plain text: no Discord markdown, no timestamp tokens", () => {
+    const p = {
+      gamertag: "Ada", raiderClan: "Iron Wolves", raiderTag: "WOLF", victimClan: "Bears", victimTag: "BEAR", raiderStatus: "dormant",
+      points: 0, fullPrice: 180, online: false, mult: 0.75, victimValue: 240, victimBase: 100, victimHeat: 140, victimHitPct: 100,
+      victimNewUntil: null, victimValueAfter: 120, raiderValueBefore: 150, raiderValueAfter: 200, raiderNewUntil: "2026-11-12T00:00:00.000Z",
+    };
+    const c = noticeCopy("raid_scored", p);
+    expect(c.kicker).toBe("Raid");
+    expect(c.title).toBe("Ada raided Bears. No points: your clan is dormant, and only active clans score.");
+    expect(c.body).toContain("An active clan would have scored 180 points.");
+    expect(c.body).toContain("Your value is 0 until 12 Nov 2026");
+    expect(`${c.title} ${c.body}`).not.toMatch(/\*\*|<t:/u);
+  });
+
   it("states dormant_raided's window from FLAG_DOWN_MS, not a hand-typed number", () => {
     const c = noticeCopy("dormant_raided", {});
     expect(c.body).toContain("24 hours");

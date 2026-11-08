@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { events, factions, raids, seasonStandings, seasons } from "@factions/db";
-import { RAID_DEDUP_MS, clanValue, raidPoints, scoringWeekStartOf } from "@factions/domain";
+import { RAID_DEDUP_MS, clanValue, raidPoints, raidScores, scoringWeekStartOf } from "@factions/domain";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 import { classifyLower, clanOnlineAt, seasonRaidFacts, type LowerVerdict } from "./raid-detect.js";
@@ -160,6 +160,8 @@ async function rescoreTx(tx: Tx, seasonId: number): Promise<RescoreReport> {
     const [row] = await tx.insert(raids).values({
       seasonId, serverId: ev.serverId, victimFactionId: victim, raiderDayzId: p.dayzId, raiderFactionId: raiderFid,
       firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
+      // raiderStatus stays null: status history is not recorded, so a retro
+      // row prices as the old rules did (raidScores treats null as unknown).
       // Retro rows keep null ranks on purpose: the standings at the original
       // instant are not reconstructible, and giant_killer only needs live rows.
       points: 0, victimOnline: false, away: true, victimRankAtLower: null, rankedCountAtLower: null,
@@ -183,8 +185,10 @@ async function rescoreTx(tx: Tx, seasonId: number): Promise<RescoreReport> {
     // same fallback raid-tick uses; never epoch (full price).
     const activatedAt = clans.get(r.victimFactionId)?.activatedAt ?? r.firstLowerAt;
     const value = clanValue({ id: r.victimFactionId, activatedAt }, facts, r.firstLowerAt, r.id);
-    // Solo raids score nothing, as live.
-    const points = r.raiderFactionId === null ? 0 : raidPoints(value, online);
+    // Solo raids, and raids by a clan that was not active, score nothing, as
+    // live. ⚠️ The status comes from the row, never from `factions` today: a
+    // clan dormant now may have been active when it raided.
+    const points = raidScores(r.raiderFactionId, r.raiderStatus) ? raidPoints(value, online) : 0;
     if (points !== r.points || online !== r.victimOnline) {
       await tx.update(raids).set({ points, victimOnline: online }).where(eq(raids.id, r.id));
     }

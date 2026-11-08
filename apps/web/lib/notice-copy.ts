@@ -1,6 +1,6 @@
 import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
-import { flagLabel, achievementSummaryLine } from "@factions/copy";
+import { flagLabel, achievementSummaryLine, raidScoredCopy } from "@factions/copy";
 
 /**
  * The site's rendering of a clan notice: a kicker, a title, and a sentence.
@@ -228,6 +228,12 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   flag_lowered_away: { group: "Raid", render: (p) => ({
     kicker: "Raid", title: "Your flag away from base is down",
     body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. It counts as a raid on your clan. It doesn't affect your base: no flag-down clock starts and your supply crate is unchanged.` }) },
+  // Twin of apps/bot/src/notice-text.ts's raid_scored; both render
+  // @factions/copy's raidScoredCopy, so only the framing differs.
+  raid_scored: { group: "Raid", render: (p) => {
+    const c = raidScoredCopy(p, { lowerer: who(p.gamertag), victim: p.victimClan ? String(p.victimClan) : "a clan", date: dateOf, bold: (x) => x });
+    return { kicker: "Raid", title: c.title, body: [c.scoring, c.yourValue, c.theirValue].filter(Boolean).join(" ") };
+  } },
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
     body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },

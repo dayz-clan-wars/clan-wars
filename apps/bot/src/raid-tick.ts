@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { factionMembers, factions, raids, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { RAID_DEDUP_MS, clanValue, raidPoints, scoringWeekStartOf } from "@factions/domain";
+import { RAID_DEDUP_MS, RAID_OFFLINE_MULT, RAID_ONLINE_MULT, clanValue, raidPoints, raidScores, scoringWeekStartOf, valueBreakdown, type RaidFact, type ValueBreakdown } from "@factions/domain";
 import { appendWarLogTx, noticeClanTx, noticeFullMembersTx } from "@factions/roster/internal";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { classifyLower, clanOnlineAt, seasonRaidFacts } from "./raid-detect.js";
@@ -59,6 +59,50 @@ async function startFlagDown(tx: Tx, serverId: number, factionId: number, at: Da
   await queueFlagDown(tx, serverId, factionId, at, gamertag, raiderClan);
 }
 
+/**
+ * The raiding clan's own notice (2026-11-08): what the raid paid and why, and
+ * how it moved both clans' values. Channel AND every full member's DM, for an
+ * active raider and a dormant or reserved one alike: the latter is told it
+ * scored nothing, and that the raid still raised its value.
+ *
+ * Every number is frozen into the payload here, at the moment of the raid,
+ * because a value read back later has moved on. Numbers are rounded for
+ * display only; `points` is the exact figure written to the raid row.
+ */
+async function queueRaidScored(tx: Tx, a: {
+  serverId: number; at: Date; gamertag: string;
+  raider: { factionId: number; name: string; tag: string; status: string; activatedAt: Date | null };
+  victim: { id: number; name: string; tag: string; activatedAt: Date };
+  raidId: number; facts: RaidFact[]; victimBefore: ValueBreakdown; online: boolean; points: number;
+}) {
+  const fact: RaidFact = { id: a.raidId, at: a.at, raiderFactionId: a.raider.factionId, victimFactionId: a.victim.id };
+  const after = [...a.facts, fact];
+  // ⚠️ MAX_SAFE_INTEGER, as in the pricing above: every row in `facts` was
+  // written before this raid, and `after` adds this raid itself at the same
+  // instant, so "after" is the value the very next raid would see.
+  const ex = Number.MAX_SAFE_INTEGER;
+  const victimAfter = clanValue({ id: a.victim.id, activatedAt: a.victim.activatedAt }, after, a.at, ex);
+  // A reserved clan has never activated: it has no value to report yet.
+  const raiderClan = a.raider.activatedAt ? { id: a.raider.factionId, activatedAt: a.raider.activatedAt } : null;
+  const raiderBefore = raiderClan ? valueBreakdown(raiderClan, a.facts, a.at, ex) : null;
+  const raiderAfter = raiderClan ? valueBreakdown(raiderClan, after, a.at, ex) : null;
+  const v = a.victimBefore;
+  const payload = {
+    gamertag: a.gamertag, raiderClan: a.raider.name, raiderTag: a.raider.tag, raiderStatus: a.raider.status,
+    victimClan: a.victim.name, victimTag: a.victim.tag,
+    points: a.points, fullPrice: raidPoints(v.value, a.online), online: a.online,
+    mult: a.online ? RAID_ONLINE_MULT : RAID_OFFLINE_MULT,
+    victimValue: Math.round(v.value), victimBase: v.base, victimHeat: Math.round(v.heat),
+    victimHitPct: Math.round(v.hitFactor * 100), victimNewUntil: v.worthlessUntil?.toISOString() ?? null,
+    victimValueAfter: Math.round(victimAfter),
+    raiderValueBefore: raiderBefore ? Math.round(raiderBefore.value) : null,
+    raiderValueAfter: raiderAfter ? Math.round(raiderAfter.value) : null,
+    raiderNewUntil: raiderAfter?.worthlessUntil?.toISOString() ?? null,
+  };
+  await noticeClanTx(tx, { serverId: a.serverId, factionId: a.raider.factionId, kind: "raid_scored", occurredAt: a.at, payload });
+  await noticeFullMembersTx(tx, { serverId: a.serverId, factionId: a.raider.factionId, kind: "raid_scored", occurredAt: a.at, payload });
+}
+
 export async function raidTick(db: Database, opts: { batchSize?: number; onNoSeason?: (serverId: number) => void } = {}): Promise<RaidTickResult> {
   const batchSize = opts.batchSize ?? 500;
   const out: RaidTickResult = { scanned: 0, raids: 0, absorbed: 0, skippedNoSeason: 0 };
@@ -101,7 +145,11 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const season = await openSeason(tx, ev.serverId);
         if (!season) return done("no-season" as const);
         // The raider's clan, if any (full membership on this server).
-        const [raider] = await tx.select({ factionId: factionMembers.factionId, name: factions.name, tag: factions.tag }).from(factionMembers)
+        // ⚠️ The raider's status is read WITHOUT a lock. Locking a second
+        // `factions` row would deadlock two clans raiding each other at once;
+        // a dormancy commit racing this read at worst scores one raid by the
+        // status the clan held a moment earlier.
+        const [raider] = await tx.select({ factionId: factionMembers.factionId, name: factions.name, tag: factions.tag, status: factions.status, activatedAt: factions.activatedAt }).from(factionMembers)
           .innerJoin(factions, eq(factions.id, factionMembers.factionId))
           .where(and(eq(factionMembers.serverId, ev.serverId), eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full")));
         const raiderFactionId = raider?.factionId ?? null;
@@ -142,9 +190,14 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         // if one ever does, treat it as activated now (worth 0), never as
         // epoch (worth full price).
         const valued = { id: victim.id, activatedAt: victim.activatedAt ?? ev.occurredAt };
-        const value = clanValue(valued, await seasonRaidFacts(tx, season.id), ev.occurredAt, Number.MAX_SAFE_INTEGER);
-        // Solo raids stay real, announced raids that score nothing (spec non-goal).
-        const points = raiderFactionId === null ? 0 : raidPoints(value, online);
+        const facts = await seasonRaidFacts(tx, season.id);
+        const victimBefore = valueBreakdown(valued, facts, ev.occurredAt, Number.MAX_SAFE_INTEGER);
+        // Solo raids stay real, announced raids that score nothing (spec
+        // non-goal), and so do raids by a clan that is not active
+        // (2026-11-08): the row still adds heat to the raider and a hit to
+        // the victim, it just pays 0.
+        const raiderStatus = raider?.status ?? null;
+        const points = raidScores(raiderFactionId, raiderStatus) ? raidPoints(victimBefore.value, online) : 0;
         // ⚠️ Rank no longer affects points, but the giant_killer achievement
         // reads `victimRankAtLower` (victimRank === 1); null here and it can
         // never unlock. Read BEFORE the standings upsert so the rank is the
@@ -167,13 +220,21 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           await tx.insert(seasonStandings).values(u.values)
             .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: u.set });
         }
-        await tx.insert(raids).values({
+        const [inserted] = await tx.insert(raids).values({
           seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
           firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
-          points, victimOnline: online, away,
+          points, victimOnline: online, away, raiderStatus,
           victimRankAtLower: rankOf(victim.id), rankedCountAtLower: ranked.length,
           weekStart: scoringWeekStartOf(ev.occurredAt),
-        });
+        }).returning({ id: raids.id });
+        const scored = async () => {
+          if (!raider) return; // a solo raider has no clan channel to tell
+          await queueRaidScored(tx, {
+            serverId: ev.serverId, at: ev.occurredAt, gamertag: p.gamertag, raider,
+            victim: { id: victim.id, name: victim.name, tag: victim.tag, activatedAt: valued.activatedAt },
+            raidId: inserted!.id, facts, victimBefore, online, points,
+          });
+        };
         // ⚠️ The war-log line is the same for base and away raids, on
         // purpose: saying "away" would hint at where the base is not.
         const payload = { raiderClan: raider?.name ?? null, raiderTag: raider?.tag ?? null, victimClan: victim.name, victimTag: victim.tag, gamertag: p.gamertag, solo: raider === undefined, points };
@@ -182,12 +243,14 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           // Channel only, no DMs: nothing is at stake for the base, so it
           // does not warrant waking every member the way flag_down does.
           await noticeClanTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_lowered_away", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, raiderClan: raider?.name ?? null } });
+          await scored();
           return done("raid" as const);
         }
         // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
         if (startsClock) await setFlagDown(tx, victim.id, ev.occurredAt, p.dayzId);
         await appendWarLogTx(tx, { serverId: ev.serverId, kind: "raid", occurredAt: ev.occurredAt, payload });
         if (startsClock) await queueFlagDown(tx, ev.serverId, victim.id, ev.occurredAt, p.gamertag, raider?.name ?? null);
+        await scored();
         return done("raid" as const);
       });
       if (result === "raid") out.raids++;

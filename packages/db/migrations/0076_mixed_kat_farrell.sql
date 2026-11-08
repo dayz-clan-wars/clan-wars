@@ -1,0 +1,1 @@
+ALTER TABLE "raids" ADD COLUMN "raider_status" text;
