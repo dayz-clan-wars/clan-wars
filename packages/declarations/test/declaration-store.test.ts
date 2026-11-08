@@ -56,6 +56,13 @@ describe("declaration store", () => {
     serverId, poleKey: key(x, z), x, y: 100, z, owner: { factionId: fId }, evidence: { ceremonyId: cId }, at: now,
   }));
 
+  it("refuses a pole within 1 km of the map edge, for a solo and a clan", async () => {
+    expect(await solo(999, 5000)).toEqual({ ok: false, reason: "near-edge" });
+    expect(await clan(5000, 16384 - 999, factionId, ceremonyId)).toEqual({ ok: false, reason: "near-edge" });
+    expect(await db.select().from(declarations)).toHaveLength(0);
+    expect(await solo(1000, 5000)).toEqual({ ok: true, id: expect.any(Number) });
+  });
+
   it("declares a pole with nothing near it", async () => {
     expect(await solo(5000, 5000)).toEqual({ ok: true, id: expect.any(Number) });
     expect(await declarationForPlayer(db, serverId, "A")).toMatchObject({ poleKey: key(5000, 5000) });
@@ -67,7 +74,9 @@ describe("declaration store", () => {
   });
 
   it("⚠️ refuses a pole within 200 m of the Hub even with no declarations", async () => {
-    expect(await solo(HUB_POSITION.x + 10, HUB_POSITION.z)).toEqual({ ok: false, reason: "too-close" });
+    // The Hub sits in the map corner, so the edge buffer refuses it first;
+    // spacing.test.ts still covers the Hub's own 200 m check.
+    expect(await solo(HUB_POSITION.x + 10, HUB_POSITION.z)).toEqual({ ok: false, reason: "near-edge" });
   });
 
   it("refuses a second base for the same owner", async () => {

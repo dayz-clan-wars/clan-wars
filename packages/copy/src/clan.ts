@@ -1,5 +1,5 @@
 import {
-  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, FLAG_CHANGE_WINDOW_MS, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
+  ACTIVATION_WINDOW_MS, MAP_EDGE_BUFFER_M, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, FLAG_CHANGE_WINDOW_MS, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
   PENDING_EXPIRY_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS,
 } from "@factions/domain";
 import type {
@@ -130,10 +130,11 @@ const SUPPLIES: Record<SuppliesOutcome | ActorRefusal, string> = {
   off: "Build supplies are off. From the next restart, only your clan flags spawn at your pole.",
   "not-permitted": "Only an officer or the leader can turn the build supplies off or on.",
 };
-const REBIND: Record<"ok" | "refused" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
+const REBIND: Record<"ok" | "refused" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
   ...REFUSAL,
   ok: "Moved. Your base is the new pole; the old one goes public after its grace period.",
   refused: `Your clan moved its base within the last ${days(REBIND_COOLDOWN_MS)}, or has no declared base to move.`,
+  "near-edge": `Too close to the map edge. A base has to be at least ${MAP_EDGE_BUFFER_M.toLocaleString("en-US")} m in from every edge of the map.`,
   "too-close": `Too close to another declared base — no two bases sit within ${MIN_BASE_SPACING_M} m of each other.`,
   "no-candidate": "No member has raised your flag at that pole recently. Raise it again and come back.",
   "not-leader": "Only the leader can confirm a move.",
@@ -144,6 +145,7 @@ const CLAIM: Record<ReserveOutcome | "not-linked" | "no-such-ceremony" | "bad-na
   "flag-taken": "That flag was taken while you were choosing. Pick another.",
   "tag-taken": "Another clan has that tag.",
   "pole-taken": "That pole is already declared by someone else.",
+  "near-edge": `Too close to the map edge. A base has to be at least ${MAP_EDGE_BUFFER_M.toLocaleString("en-US")} m in from every edge of the map.`,
   "too-close": `Too close to another declared base. No two declared bases sit within ${MIN_BASE_SPACING_M} m of each other — first declared wins. The map cannot show you private bases, so this refusal is your first warning that one is nearby.`,
   "name-taken": "Another clan has that name.",
   "name-held": "That name belongs to a clan that renamed or disbanded and is held.",

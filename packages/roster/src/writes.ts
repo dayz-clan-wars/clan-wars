@@ -174,7 +174,7 @@ export async function claimCeremonyDb(db: Database, now: Date, discordId: string
  * with, so the freshness filter inside `selectCandidates` does not silently
  * re-narrow the 24 h the site promises.
  */
-export async function confirmRebindDb(db: Database, now: Date, actorDiscordId: string, poleKey: string): Promise<"ok" | "refused" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal> {
+export async function confirmRebindDb(db: Database, now: Date, actorDiscordId: string, poleKey: string): Promise<"ok" | "refused" | "near-edge" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return a;
   if (a.role !== "leader") return "not-leader";

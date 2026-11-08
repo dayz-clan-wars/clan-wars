@@ -19,9 +19,9 @@ const UID_STRANGER = "B".repeat(40);
 // (1,1,1)/(9,8,7), which the old Flag_White design put well inside the Hub's
 // exclusion zone.
 const P1 = { x: 10000, y: 100, z: 10000 };
-const P2 = { x: 20000, y: 100, z: 20000 };
+const P2 = { x: 6000, y: 100, z: 6000 };
 const P1_KEY = "10000.00:100.00:10000.00";
-const P2_KEY = "20000.00:100.00:20000.00";
+const P2_KEY = "6000.00:100.00:6000.00";
 
 describe("PgRebindStore", () => {
   let db: Database;
@@ -225,10 +225,10 @@ describe("PgRebindStore", () => {
 
   it("refuses a target within 200 m of another declaration", async () => {
     // A second, solo declaration ~150 m from P2.
-    const nearP2Key = "20150.00:100.00:20000.00";
+    const nearP2Key = "6150.00:100.00:6000.00";
     const [ev] = await raiseAt({ poleKey: nearP2Key, dayzId: "C".repeat(40) });
     await db.insert(declarations).values({
-      serverId, poleKey: nearP2Key, x: "20150.00", y: "100.00", z: "20000.00",
+      serverId, poleKey: nearP2Key, x: "6150.00", y: "100.00", z: "6000.00",
       ownerDayzId: "C".repeat(40), evidenceEventId: ev!.id, declaredAt: ago(999_999),
     });
 
@@ -293,10 +293,10 @@ describe("PgRebindStore", () => {
     // `lockDeclarations` before the release is what keeps the order the same
     // for everyone. Every legitimate outcome is accepted here; a THROW is
     // the failure.
-    const P3 = { x: 30000, y: 100, z: 30000 };
-    const P4 = { x: 40000, y: 100, z: 40000 };
-    const P3_KEY = "30000.00:100.00:30000.00";
-    const P4_KEY = "40000.00:100.00:40000.00";
+    const P3 = { x: 8000, y: 100, z: 8000 };
+    const P4 = { x: 12000, y: 100, z: 12000 };
+    const P3_KEY = "8000.00:100.00:8000.00";
+    const P4_KEY = "12000.00:100.00:12000.00";
     const UID_WOLF = "W".repeat(40);
 
     const [wolves] = await db.insert(factions).values({

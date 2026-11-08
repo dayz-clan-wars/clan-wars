@@ -20,9 +20,9 @@ const W = {
 // Both far from the Hub (100, 93) and far from each other — declareTx now
 // enforces 200 m, so these can no longer sit near (1,1,1)/(9,8,7).
 const P1 = { x: 10000, y: 100, z: 10000 };
-const P2 = { x: 20000, y: 100, z: 20000 };
+const P2 = { x: 6000, y: 100, z: 6000 };
 const P1_KEY = "10000.00:100.00:10000.00";
-const P2_KEY = "20000.00:100.00:20000.00";
+const P2_KEY = "6000.00:100.00:6000.00";
 
 describe("rebind and the dormancy clock", () => {
   let db: Database;

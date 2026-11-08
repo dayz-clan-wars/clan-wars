@@ -11,7 +11,7 @@ describe("rules", () => {
     expect(R.CEREMONY_WINDOW_MS).toBe(10 * MIN);
     expect(R.CLAIM_WINDOW_MS).toBe(24 * HOUR);
     expect(R.ACTIVATION_WINDOW_MS).toBe(24 * HOUR);
-    expect(R.NEW_POLE_GRACE_MS).toBe(7 * DAY);
+    expect(R.NEW_POLE_GRACE_MS).toBe(3 * DAY);
     expect(R.RELEASED_POLE_GRACE_MS).toBe(3 * DAY);
     expect(R.SOLO_LAPSE_MS).toBe(7 * DAY);
     expect(R.RAID_DEDUP_MS).toBe(24 * HOUR);

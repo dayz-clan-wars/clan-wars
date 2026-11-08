@@ -85,6 +85,12 @@ describe("adoptCarriedTx", () => {
     expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: key(5000, 5000), carriedSince: now });
   });
 
+  it("refuses a pole within 1 km of the map edge and keeps the carried base", async () => {
+    await declare(BEAR, 1100, 5000, true);
+    expect(await adopt(BEAR, 990, 5000)).toEqual({ ok: false, reason: "near-edge" });
+    expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: key(1100, 5000), carriedSince: now });
+  });
+
   it("refuses a pole another base already sits on", async () => {
     await declare(BEAR, 5000, 5000, true);
     await declare(WOLF, 9000, 9000, false);

@@ -9,7 +9,7 @@ import { activeServerId } from "./server";
 import { reportableIncidentsDb } from "./internal/incidents";
 import type { ReportableIncident } from "./internal/incidents";
 
-export const DECLARE_SOLO_REASONS = ["not-linked", "in-clan", "no-raise", "too-close", "pole-taken", "owner-has-base"] as const;
+export const DECLARE_SOLO_REASONS = ["not-linked", "in-clan", "no-raise", "near-edge", "too-close", "pole-taken", "owner-has-base"] as const;
 export type DeclareSoloReason = (typeof DECLARE_SOLO_REASONS)[number];
 export type DeclareSoloOutcome = { ok: true } | { ok: false; reason: DeclareSoloReason };
 

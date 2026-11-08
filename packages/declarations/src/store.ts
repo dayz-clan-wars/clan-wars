@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { declarations, events, factionMembers, identityLinks, poles, servers } from "@factions/db";
-import { tooClose, distance2d, PUBLIC_BASE_DESPAWN_MS, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { tooClose, nearMapEdge, distance2d, PUBLIC_BASE_DESPAWN_MS, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { and, desc, eq, gt, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -14,7 +14,7 @@ export type DeclareArgs = {
 };
 export type DeclareOutcome =
   | { ok: true; id: number }
-  | { ok: false; reason: "too-close" | "pole-taken" | "owner-has-base" };
+  | { ok: false; reason: "near-edge" | "too-close" | "pole-taken" | "owner-has-base" };
 
 export type Declaration = { id: number; poleKey: string; x: string; y: string; z: string; declaredAt: Date; carriedSince: Date | null };
 
@@ -68,6 +68,8 @@ export async function lockDeclarations(tx: Tx, serverId: number): Promise<void> 
  * `@factions/domain` pole-key.ts) — so callers must pass matching values.
  */
 export async function declareTx(tx: Tx, a: DeclareArgs): Promise<DeclareOutcome> {
+  if (nearMapEdge({ x: a.x, z: a.z })) return { ok: false, reason: "near-edge" };
+
   await lockDeclarations(tx, a.serverId);
 
   const existing = await tx.select({ poleKey: declarations.poleKey, x: declarations.x, z: declarations.z })
@@ -139,7 +141,7 @@ export async function releaseTx(tx: Tx, owner: Owner, at: Date): Promise<boolean
 }
 
 export type AdoptArgs = { serverId: number; factionId: number; poleKey: string; x: number; y: number; z: number; eventId: number; at: Date };
-export type AdoptOutcome = { ok: true } | { ok: false; reason: "not-carried" | "too-close" | "pole-taken" };
+export type AdoptOutcome = { ok: true } | { ok: false; reason: "not-carried" | "near-edge" | "too-close" | "pole-taken" };
 
 /**
  * Move a base the wipe carried (`carried_since` set) onto the pole the clan
@@ -160,6 +162,7 @@ export type AdoptOutcome = { ok: true } | { ok: false; reason: "not-carried" | "
  * Lock order (spec §4.12): the caller holds the clan's `factions` row first.
  */
 export async function adoptCarriedTx(tx: Tx, a: AdoptArgs): Promise<AdoptOutcome> {
+  if (nearMapEdge({ x: a.x, z: a.z })) return { ok: false, reason: "near-edge" };
   await lockDeclarations(tx, a.serverId);
   const rows = await tx.select({ id: declarations.id, poleKey: declarations.poleKey, x: declarations.x, z: declarations.z, ownerFactionId: declarations.ownerFactionId, carriedSince: declarations.carriedSince })
     .from(declarations)

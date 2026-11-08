@@ -1,4 +1,4 @@
-import { HUB_POSITION, MIN_BASE_SPACING_M } from "./rules";
+import { HUB_POSITION, MAP_EDGE_BUFFER_M, MIN_BASE_SPACING_M, WORLD_SIZE_M } from "./rules";
 
 export type Point2 = { x: number; z: number };
 
@@ -21,4 +21,9 @@ export function tooClose(candidate: Point2, existing: readonly Point2[], minM: n
     if (distance2d(candidate, p) < minM) return { x: p.x, z: p.z };
   }
   return null;
+}
+
+/** True when the point is closer than `bufferM` to any edge of the map. */
+export function nearMapEdge(p: Point2, bufferM: number = MAP_EDGE_BUFFER_M, worldM: number = WORLD_SIZE_M): boolean {
+  return Math.min(p.x, p.z, worldM - p.x, worldM - p.z) < bufferM;
 }

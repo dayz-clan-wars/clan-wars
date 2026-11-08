@@ -28,7 +28,7 @@ const REBINDABLE: string[] = ["active", "dormant"];
  * gets a decision rather than a generic throw.
  */
 class RebindAbort extends Error {
-  constructor(readonly outcome: "refused" | "too-close") { super(outcome); }
+  constructor(readonly outcome: "refused" | "near-edge" | "too-close") { super(outcome); }
 }
 
 /** The faction fields a rebind decision needs. */
@@ -63,7 +63,7 @@ export type RebindArgs = {
 export interface RebindStore {
   factionFor(factionId: number): Promise<RebindTarget | null>;
   qualifyingRaises(faction: RebindTarget, since: Date): Promise<QualifyingRaise[]>;
-  rebind(a: RebindArgs): Promise<"ok" | "refused" | "too-close">;
+  rebind(a: RebindArgs): Promise<"ok" | "refused" | "near-edge" | "too-close">;
 }
 
 export class PgRebindStore implements RebindStore {
@@ -178,7 +178,7 @@ export class PgRebindStore implements RebindStore {
    * `declareTx`/`releaseTx` both assume the caller already holds `factions`
    * if it holds anything.
    */
-  async rebind(a: RebindArgs): Promise<"ok" | "refused" | "too-close"> {
+  async rebind(a: RebindArgs): Promise<"ok" | "refused" | "near-edge" | "too-close"> {
     return this.db.transaction(async (tx) => {
       // Read before the update overwrites it, the way `rename` reads the
       // previous name. This is a plain SELECT on the primary key that the
@@ -227,7 +227,7 @@ export class PgRebindStore implements RebindStore {
       // for the clan to already own. pole-taken means another declarer won
       // the target pole in the window between qualifyingRaises and this
       // call — reported the same as any other refusal.
-      if (!declared.ok) throw new RebindAbort(declared.reason === "too-close" ? "too-close" : "refused");
+      if (!declared.ok) throw new RebindAbort(declared.reason === "too-close" || declared.reason === "near-edge" ? declared.reason : "refused");
 
       const actor = await actorGamertagTx(tx, a.leaderDiscordId);
 
