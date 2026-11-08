@@ -530,7 +530,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   exactly that to COK and NIGHT; it is amended.
 - **Lock order (spec §4.12): `factions` → `flag_holds` → `faction_textures` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
-  → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
+  → `succession_claims` → `season_standings` → `raids` → `defenses` → `public_base_bounties` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
   `achievement_counters` → `koth_votes` → `koth_vote_voters` → `koth_events` → `bounties` → `well_awards` → `raid_award_weeks` → `award_grants` → `award_transfers` → `faction_events` → `war_log_events` → `clan_notices` →
   `zone_incidents` → `zone_incident_participants` → `bans`.**
@@ -545,6 +545,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   then `clan_notices`, and, for a prize, the tick's payout `bounties` → `award_grants` →
   `clan_notices` (moved ahead of `award_grants` on 2026-09-30 for this; no writer touches
   `bounties` with `faction_events` or `war_log_events`, so the move reorders nothing real).
+  `public_base_bounties` is written by `apps/bot/src/public-bounty-tick.ts` alone, in the order `season_standings` → `public_base_bounties` → `clan_notices`. ⚠️ It is a second points ledger beside `raids`: `rebuildStandingsTx` and `weekTopThree` (`apps/bot/src/standings.ts`) both add it in, and the season rescore never touches it. ⚠️ The tick seeds its cursor at the log head on first run, so a deploy never pays out for old lowers.
   `raid_award_weeks` is written by the weekly raid-award payout (`payRaidAwards`, `apps/bot/src/raid-award.ts`) alone, in the order `raid_award_weeks` → `award_grants` → `clan_notices`.
   `well_awards` is written by `well-award-tick.ts` alone: the recorder inserts into it (plus
   its `consumer_cursors` row) and touches nothing else, and the payout takes `well_awards`

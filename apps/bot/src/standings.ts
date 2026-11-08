@@ -58,23 +58,25 @@ export async function rankedStandings(db: Database | Tx, seasonId: number): Prom
  * at all crowns nobody.
  */
 export async function weekTopThree(db: Database | Tx, seasonId: number, weekStart: Date): Promise<{ factionId: number; name: string; tag: string; texture: string; points: number }[]> {
-  const weekPoints = sql<number>`sum(${raids.points})`;
-  const timesRaided = sql<number>`coalesce(${seasonStandings.timesRaided}, 0)`;
-  const rows = await db.select({
-    factionId: raids.raiderFactionId,
-    name: factions.name,
-    tag: factions.tag,
-    texture: factions.texture,
-    points: weekPoints.mapWith(Number),
-  }).from(raids)
-    .innerJoin(factions, eq(factions.id, raids.raiderFactionId))
-    .leftJoin(seasonStandings, and(eq(seasonStandings.seasonId, raids.seasonId), eq(seasonStandings.factionId, raids.raiderFactionId)))
-    .where(and(eq(raids.seasonId, seasonId), eq(raids.weekStart, weekStart)))
-    .groupBy(raids.raiderFactionId, factions.id, factions.name, factions.tag, factions.texture, factions.activatedAt, seasonStandings.timesRaided)
-    .having(sql`${weekPoints} > 0`)
-    .orderBy(desc(weekPoints), asc(timesRaided), asc(factions.activatedAt), asc(factions.id))
-    .limit(ALPHAS_PER_WEEK);
-  return rows.map((r) => ({ factionId: r.factionId!, name: r.name, tag: r.tag, texture: r.texture, points: r.points }));
+  // Raid points PLUS public-base bounties and penalties (2026-11-08): both
+  // ledgers carry `week_start` from the same `scoringWeekStartOf`.
+  const rows = (await db.execute(sql`
+    with week as (
+      select raider_faction_id as faction_id, points from raids
+      where season_id = ${seasonId} and week_start = ${weekStart.toISOString()}::timestamptz and raider_faction_id is not null
+      union all
+      select faction_id, points from public_base_bounties
+      where season_id = ${seasonId} and week_start = ${weekStart.toISOString()}::timestamptz
+    ),
+    summed as (select faction_id, sum(points)::int as points from week group by faction_id having sum(points) > 0)
+    select f.id::int as faction_id, f.name, f.tag, f.texture, s.points
+    from summed s
+    join factions f on f.id = s.faction_id
+    left join season_standings ss on ss.season_id = ${seasonId} and ss.faction_id = s.faction_id
+    order by s.points desc, coalesce(ss.times_raided, 0) asc, f.activated_at asc nulls last, f.id asc
+    limit ${ALPHAS_PER_WEEK}
+  `)) as unknown as { faction_id: number; name: string; tag: string; texture: string; points: number }[];
+  return rows.map((r) => ({ factionId: r.faction_id, name: r.name, tag: r.tag, texture: r.texture, points: Number(r.points) }));
 }
 
 /**
@@ -121,16 +123,22 @@ export async function rebuildStandingsTx(tx: Tx, seasonId: number): Promise<numb
       select faction_id, count(*)::int as defenses
       from defenses where season_id = ${seasonId}
       group by faction_id
+    ),
+    bounty as (
+      select faction_id, sum(points)::int as points
+      from public_base_bounties where season_id = ${seasonId}
+      group by faction_id
     )
     select
-      coalesce(raider.faction_id, victim.faction_id, defense.faction_id)::int as faction_id,
-      coalesce(raider.points, 0) as points,
+      coalesce(raider.faction_id, victim.faction_id, defense.faction_id, bounty.faction_id)::int as faction_id,
+      (coalesce(raider.points, 0) + coalesce(bounty.points, 0))::int as points,
       coalesce(raider.raids, 0) as raids,
       coalesce(victim.times_raided, 0) as times_raided,
       coalesce(defense.defenses, 0) as defenses
     from raider
     full outer join victim on victim.faction_id = raider.faction_id
     full outer join defense on defense.faction_id = coalesce(raider.faction_id, victim.faction_id)
+    full outer join bounty on bounty.faction_id = coalesce(raider.faction_id, victim.faction_id, defense.faction_id)
   `);
   const rows = computed as unknown as { faction_id: number; points: number; raids: number; times_raided: number; defenses: number }[];
 

@@ -1,9 +1,11 @@
-import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, FLAG_CHANGE_WINDOW_MS, timeLeftText } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, FLAG_CHANGE_WINDOW_MS, NEW_POLE_MOVE_WINDOW_MS, PUBLIC_BASE_BOUNTY_POINTS, timeLeftText } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
 import { rel, at, atRel, flagLabel, achievementSummaryLine, raidScoredCopy } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
 
+/** A public-base notice's frozen points, or the rule's number when the payload has none. */
+const bountyPoints = (v: unknown): number => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.abs(Number(v)) : PUBLIC_BASE_BOUNTY_POINTS);
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
@@ -166,6 +168,20 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   non_member_raise: (p, ctx) => `⚑ ${person(p.gamertag, ctx.site)} (not a member) raised your flag at your base${since(ctx)}`,
   colors_elsewhere: (p, ctx) => `🏴 Your flag is flying at a pole that isn't yours — raised by ${person(p.gamertag, ctx.site)}`,
   rebind_proposed: (p, ctx) => `📦 ${person(p.gamertag, ctx.site)} raised our flag at a new pole. Leader: confirm the move within ${hours(REBIND_CONFIRM_MS)}h: [open it](<${p.link}>)`,
+  // Public-base points (public-bounty-tick). The number is frozen in the
+  // payload at write time, like a raid's points.
+  public_bounty: (p, ctx) => `🎯 ${person(p.gamertag, ctx.site)} took down the flag on a public base: **+${bountyPoints(p.points)} points**.`,
+  public_penalty: (p, ctx) => `💸 ${person(p.gamertag, ctx.site)} raised a flag on a public base: **−${bountyPoints(p.points)} points**. Declare a base to keep it, or let it go.`,
+  // The pole's first raise by a clan that already has a base (raise-tick).
+  // ⚠️ No coordinates: the clan knows where its member is.
+  new_pole: (p, ctx) => {
+    const by = atRelToken(p.publicAt);
+    return `📍 ${person(p.gamertag, ctx.site)} raised a flag at a new pole. Move the base there${by ? ` by ${by}` : ` within ${hours(NEW_POLE_MOVE_WINDOW_MS)} hours`} or the pole goes public. Leader: [move the base](<${p.link}>)`;
+  },
+  solo_new_pole: (p) => {
+    const by = atRelToken(p.publicAt);
+    return `📍 You raised a flag at a new pole. Move your base there${by ? ` by ${by}` : ` within ${hours(NEW_POLE_MOVE_WINDOW_MS)} hours`} or the pole goes public. Release your current base and declare the new one on [your base page](<${p.link}>).`;
+  },
   rebind_confirmed: () => `📦 Moved. Supplies follow at the next restart. The old base goes public in ${days(RELEASED_POLE_GRACE_MS)} days.`,
   joined: (p, ctx) => `➕ ${person(p.gamertag, ctx.site)} joined — pending until seen at the base`,
   became_full: (p, ctx) => `✅ ${person(p.gamertag, ctx.site)} is now a full member (seen at the base)`,
@@ -366,4 +382,5 @@ const LINK_BUTTONS: Partial<Record<ClanNoticeKind, { label: string; field: strin
   booster_kit_unchosen: { label: "Choose your kit", field: "kitUrl" },
   award_granted: { label: "Configure your award", field: "awardUrl" },
   award_received: { label: "Configure your award", field: "awardUrl" },
+  solo_new_pole: { label: "Move your base", field: "link" },
 };

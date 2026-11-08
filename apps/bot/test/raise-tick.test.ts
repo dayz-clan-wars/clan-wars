@@ -6,7 +6,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { FLAG_CHANGE_WINDOW_MS, FLAG_DOWN_MS } from "@factions/domain";
+import { FLAG_CHANGE_WINDOW_MS, FLAG_DOWN_MS, NEW_POLE_MOVE_WINDOW_MS } from "@factions/domain";
 import { declarationForFaction } from "@factions/declarations";
 import { raiseTick } from "../src/raise-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
@@ -134,13 +134,40 @@ describe("raiseTick", () => {
     expect((await db.select().from(clanNotices))[0]).toMatchObject({ kind: "revived", payload: { gamertag: "Bear1" } });
   });
 
-  it("the clan's texture raised at a pole that is not its declaration: a full member → rebind_proposed with the settings link; a non-member → colors_elsewhere", async () => {
+  it("the clan's texture raised at a pole that is not its declaration: a full member's first raise → new_pole with the deadline and settings link; a non-member → colors_elsewhere", async () => {
     await raise(B1, "Bear1", "Flag_Bear", P3, now);
     await raise(S1, "Solo", "Flag_Bear", P3, now);
     await raiseTick(db, { siteBaseUrl: SITE });
     const kinds = (await db.select({ k: clanNotices.kind, p: clanNotices.payload }).from(clanNotices).orderBy(clanNotices.id));
-    expect(kinds[0]).toMatchObject({ k: "rebind_proposed", p: { gamertag: "Bear1", link: `${SITE}/clan/settings` } });
+    expect(kinds).toHaveLength(2);
+    expect(kinds[0]).toMatchObject({ k: "new_pole", p: { gamertag: "Bear1", link: `${SITE}/clan/settings`, publicAt: new Date(now.getTime() + NEW_POLE_MOVE_WINDOW_MS).toISOString() } });
     expect(kinds[1]).toMatchObject({ k: "colors_elsewhere", p: { gamertag: "Solo" } });
+  });
+
+  it("any flag a based clan member raises first at a new pole → new_pole; a later raise there by them → nothing more", async () => {
+    await raise(B1, "Bear1", "Flag_Wolf", P3, now);
+    await raise(B1, "Bear1", "Flag_Wolf", P3, new Date(now.getTime() + 60_000));
+    const r = await raiseTick(db, { siteBaseUrl: SITE });
+    expect(r.noticed).toBe(1);
+    const rows = await db.select({ k: clanNotices.kind, f: clanNotices.factionId }).from(clanNotices);
+    expect(rows).toEqual([{ k: "new_pole", f: BEAR }]);
+  });
+
+  it("⚠️ a based player raising at a pole someone else raised first is told nothing", async () => {
+    await raise(W1, "Wolfie", "Flag_White", P3, now);
+    await raise(B1, "Bear1", "Flag_White", P3, new Date(now.getTime() + 60_000));
+    await raiseTick(db, { siteBaseUrl: SITE });
+    expect(await db.select().from(clanNotices)).toEqual([]);
+  });
+
+  it("a solo with a base who raises first at a new pole gets a solo_new_pole DM linking the base page", async () => {
+    await declareSolo(P4, S1);
+    await db.insert(identityLinks).values({ discordId: "dS1", dayzId: S1, gamertag: "Solo", verifiedAt: now });
+    await raise(S1, "Solo", "Flag_White", P9, now);
+    const r = await raiseTick(db, { siteBaseUrl: SITE });
+    expect(r.noticed).toBe(1);
+    const [n] = await db.select({ kind: clanNotices.kind, target: clanNotices.target, to: clanNotices.discordTargetId, payload: clanNotices.payload }).from(clanNotices);
+    expect(n).toMatchObject({ kind: "solo_new_pole", target: "dm", to: "dS1", payload: { link: `${SITE}/base`, publicAt: new Date(now.getTime() + NEW_POLE_MOVE_WINDOW_MS).toISOString() } });
   });
 
   it("a non-member's raise at a SOLO declaration DMs the declarant (solo_non_member_raise)", async () => {
@@ -315,11 +342,11 @@ describe("raiseTick", () => {
       expect(await db.select().from(factionEvents)).toHaveLength(0);
     });
 
-    it("a clan that still has a declaration gets the rebind proposal, not a bind", async () => {
+    it("a clan that still has a declaration gets the new-pole notice, not a bind", async () => {
       await raise(B1, "Bear1", "Flag_Bear", P3, now);
       const r = await raiseTick(db, { siteBaseUrl: SITE });
       expect(r.bound).toBe(0);
-      expect((await db.select({ k: clanNotices.kind, p: clanNotices.payload }).from(clanNotices))[0]).toMatchObject({ k: "rebind_proposed", p: { gamertag: "Bear1", link: `${SITE}/clan/settings` } });
+      expect((await db.select({ k: clanNotices.kind, p: clanNotices.payload }).from(clanNotices))[0]).toMatchObject({ k: "new_pole", p: { gamertag: "Bear1", link: `${SITE}/clan/settings` } });
       const d = await declarationForFaction(db, BEAR);
       expect(d).toMatchObject({ poleKey: P1 }); // unchanged
     });
@@ -352,14 +379,14 @@ describe("raiseTick", () => {
         expect(await db.select().from(clanNotices)).toEqual([]);
       });
 
-      it("⚠️ a clan that still has a base is not moved by a White raise, and is told nothing", async () => {
+      it("⚠️ a clan that still has a base is not moved by a White raise; it is told it can move there", async () => {
         // White at a free pole is founding-ceremony material; a clan moves
-        // its base only through the rebind proposal.
+        // its base only when its leader confirms on the site.
         await raise(B1, "Bear1", "Flag_White", P3, now);
         const r = await raiseTick(db, { siteBaseUrl: SITE });
-        expect(r).toMatchObject({ bound: 0, noticed: 0 });
+        expect(r).toMatchObject({ bound: 0, noticed: 1 });
         expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: P1 });
-        expect(await db.select().from(clanNotices)).toEqual([]);
+        expect((await db.select({ k: clanNotices.kind }).from(clanNotices))).toEqual([{ k: "new_pole" }]);
       });
 
       it("a pending member's or a clanless player's White raise binds nothing", async () => {
@@ -410,16 +437,16 @@ describe("raiseTick", () => {
       expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: EDGE, carriedSince: null });
     });
 
-    it("101 m away the clan's own flag falls through to the rebind proposal, and the base stays carried", async () => {
+    it("101 m away the clan's own flag falls through to the new-pole notice, and the base stays carried", async () => {
       await raise(B1, "Bear1", "Flag_Bear", FAR, now);
       expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, noticed: 1 });
-      expect((await db.select({ k: clanNotices.kind }).from(clanNotices))[0]).toEqual({ k: "rebind_proposed" });
+      expect((await db.select({ k: clanNotices.kind }).from(clanNotices))[0]).toEqual({ k: "new_pole" });
       expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
     });
 
-    it("101 m away a White raise does nothing for the clan", async () => {
+    it("101 m away a White raise adopts and binds nothing; the clan only gets the new-pole notice", async () => {
       await raise(B1, "Bear1", "Flag_White", FAR, now);
-      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, bound: 0, noticed: 0 });
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, bound: 0, noticed: 1 });
       expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00" });
     });
 
@@ -560,12 +587,12 @@ describe("raiseTick", () => {
       expect((await db.select().from(flagHolds))[0]).toMatchObject({ kind: "pending" });
     });
 
-    it("the pending flag raised at another pole does nothing", async () => {
+    it("the pending flag raised at another pole completes nothing (only the new-pole notice)", async () => {
       await pend();
       await raise(B1, "Bear1", "Flag_Wolf", P9, now);
       await raiseTick(db, { siteBaseUrl: SITE });
       expect((await bearRow()).texture).toBe("Flag_Bear");
-      expect(await db.select().from(clanNotices)).toEqual([]);
+      expect((await db.select({ k: clanNotices.kind }).from(clanNotices))).toEqual([{ k: "new_pole" }]);
     });
 
     it("a non-member raising the pending flag at home completes nothing", async () => {

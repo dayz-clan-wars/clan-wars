@@ -51,20 +51,26 @@ export const CLAN_TAG_LENGTH = { min: 2, max: 5 } as const;
 
 // Bases
 export const DECLARATIONS_PER_PLAYER = 1;
-export const NEW_POLE_GRACE_MS = 7 * DAY;
+export const NEW_POLE_GRACE_MS = 3 * DAY;
 export const RELEASED_POLE_GRACE_MS = 3 * DAY;
 export const MIN_BASE_SPACING_M = 200;
 export const WATCH_ZONE_RADIUS_M = 100;
 export const SOLO_LAPSE_MS = 7 * DAY;
 /**
+ * No base may be declared at a pole closer than this to any map edge
+ * (measured against `WORLD_SIZE_M`). Enforced in `declareTx` and
+ * `adoptCarriedTx`, so every path that binds a pole refuses it.
+ */
+export const MAP_EDGE_BUFFER_M = 1000;
+/**
  * An undeclared pole whose flag has not been raised for this long has
  * despawned in game, so it drops off the public-bases layer.
- * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the nasdara repo's
+ * ⚠️ Mirrors `FlagRefreshMaxDuration` (604800 s) in the nasdara repo's
  * `db/globals.xml` — a different repo, so no test can hold the two together.
  * Retune one and the map either keeps drawing bases that are gone or drops
  * ones that are still standing.
  */
-export const PUBLIC_BASE_DESPAWN_MS = 14 * DAY;
+export const PUBLIC_BASE_DESPAWN_MS = 7 * DAY;
 /**
  * The Fast Travel Hub's arrival point (fast-travel-points.json, `hub`). The
  * 200 m rule treats it as a declaration that always exists and is never
@@ -158,7 +164,19 @@ export const VOTE_THRESHOLD = { num: 2, den: 3 } as const;
 export const FAILED_VOTE_COOLDOWN_MS = 14 * DAY;
 export const RENAME_COOLDOWN_MS = 30 * DAY;
 export const REBIND_CONFIRM_MS = 24 * HOUR;
-export const REBIND_COOLDOWN_MS = 7 * DAY;
+/**
+ * A first raise at a new pole by a player who already has a declared base
+ * (their clan's, or their own solo base) gives that pole this long before it
+ * goes public, instead of NEW_POLE_GRACE_MS: move the base there, or it is
+ * published. Set once, by the pole's FIRST raise; later raises never move it.
+ */
+export const NEW_POLE_MOVE_WINDOW_MS = 24 * HOUR;
+/**
+ * A clan earns this for lowering the flag on a public base (once per base per
+ * clan) and loses it for every raise of a flag on one. Counts toward the
+ * season total and the weekly Alpha ranking.
+ */
+export const PUBLIC_BASE_BOUNTY_POINTS = 50;
 /** A vault code is 4 to 6 digits: a 4-dial combination lock takes 4, a digital code lock 4 to 6. */
 export const VAULT_CODE_DIGITS = { min: 4, max: 6 } as const;
 

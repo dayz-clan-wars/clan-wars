@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distance2d, tooClose, HUB_POSITION, MIN_BASE_SPACING_M } from "../src/index.js";
+import { distance2d, tooClose, nearMapEdge, HUB_POSITION, MIN_BASE_SPACING_M, MAP_EDGE_BUFFER_M, WORLD_SIZE_M } from "../src/index.js";
 
 describe("distance2d", () => {
   it("is planar on x and z, ignoring altitude", () => {
@@ -29,5 +29,30 @@ describe("tooClose", () => {
 
   it("uses MIN_BASE_SPACING_M by default", () => {
     expect(tooClose(far, [{ x: far.x + MIN_BASE_SPACING_M - 1, z: far.z }])).not.toBeNull();
+  });
+});
+
+describe("nearMapEdge", () => {
+  it("allows the middle of the map", () => {
+    expect(nearMapEdge({ x: WORLD_SIZE_M / 2, z: WORLD_SIZE_M / 2 })).toBe(false);
+  });
+
+  it("refuses inside the buffer on every side", () => {
+    const mid = WORLD_SIZE_M / 2;
+    const inside = MAP_EDGE_BUFFER_M - 0.01;
+    expect(nearMapEdge({ x: inside, z: mid })).toBe(true);
+    expect(nearMapEdge({ x: WORLD_SIZE_M - inside, z: mid })).toBe(true);
+    expect(nearMapEdge({ x: mid, z: inside })).toBe(true);
+    expect(nearMapEdge({ x: mid, z: WORLD_SIZE_M - inside })).toBe(true);
+  });
+
+  it("allows exactly the buffer — the rule is strictly less than", () => {
+    expect(nearMapEdge({ x: MAP_EDGE_BUFFER_M, z: MAP_EDGE_BUFFER_M })).toBe(false);
+    expect(nearMapEdge({ x: WORLD_SIZE_M - MAP_EDGE_BUFFER_M, z: WORLD_SIZE_M - MAP_EDGE_BUFFER_M })).toBe(false);
+  });
+
+  it("is 1 km on a 16384 m map", () => {
+    expect(MAP_EDGE_BUFFER_M).toBe(1000);
+    expect(WORLD_SIZE_M).toBe(16384);
   });
 });

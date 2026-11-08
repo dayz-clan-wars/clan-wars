@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Public bases are worth points.** Lower the flag on a public base and your clan scores 50 points, once per base. Raise a flag on one and your clan loses 50, every time. Both count toward your season total and the weekly Alpha ranking. Your clan channel tells you when it happens. A public base only shows on the map while its flag is up.
+
+### Changed
+
+- **Moving your base is easier.** Any flag a full member raises at a free pole can become your new base, not just your clan's own flag. The leader confirms the move on the clan settings page within 24 hours, and your supplies follow at the next restart. There is no longer a 7-day cooldown between moves. The one catch: you can't move back to the pole you just left until its 3 days are up.
+- **New poles are on a shorter clock.** A new pole now has 3 days to be declared before it shows on the public map, down from 7. If whoever raised the first flag there already has a base, it's 24 hours: move your base there or it goes public. Your clan channel (or your DMs, for a solo) gets a heads-up when it happens, with a link to move.
+- **Public bases drop off the map after 7 days** without a flag raise, down from 14, to match how fast an abandoned base now decays in game.
+- The guide's Bases, Running a clan, Scoreboard and Rules on one page chapters are updated for all of this.
+
 ## [2.19.0] - 2026-11-08
 
 ### Added

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, poles, events, admFiles, type Database } from "@factions/db";
-import { NEW_POLE_GRACE_MS } from "@factions/domain";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, poles, events, admFiles, declarations, type Database } from "@factions/db";
+import { NEW_POLE_GRACE_MS, NEW_POLE_MOVE_WINDOW_MS } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { runPoleProjection } from "../src/pole-tick.js";
 
@@ -16,7 +16,7 @@ describe("runPoleProjection", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table poles, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table declarations, poles, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: t0, linesIngested: 0, complete: true }).returning();
@@ -54,5 +54,42 @@ describe("runPoleProjection", () => {
     await flag("raised", t0);
     await runPoleProjection(db);
     expect(await runPoleProjection(db)).toEqual({ scanned: 0, upserted: 0 });
+  });
+
+  const raiseBy = (dayzId: string, poleKey: string, at: Date) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: "flag.raised", occurredAt: at,
+      payload: { dayzId, gamertag: "G", texture: "Flag_White", action: "raised", poleKey, pole: { x: 5000, y: 20, z: 5000 } },
+    }).returning({ id: events.id });
+
+  const soloBase = async (dayzId: string) => {
+    const [ev] = await raiseBy(dayzId, "9000.00:20.00:9000.00", new Date(t0.getTime() - 86_400_000));
+    await db.insert(declarations).values({
+      serverId, poleKey: "9000.00:20.00:9000.00", x: "9000.00", y: "20.00", z: "9000.00",
+      ownerDayzId: dayzId, evidenceEventId: ev!.id, declaredAt: t0,
+    });
+  };
+  const graceOf = async (poleKey: string) =>
+    (await db.select().from(poles).where(eq(poles.poleKey, poleKey)))[0]!.graceUntil.getTime();
+
+  it("a FIRST raise by someone who already has a base gives the pole 24 hours, not the new-pole grace", async () => {
+    await soloBase("B");
+    await raiseBy("B", "5000.00:20.00:5000.00", t0);
+    await runPoleProjection(db);
+    expect(await graceOf("5000.00:20.00:5000.00")).toBe(t0.getTime() + NEW_POLE_MOVE_WINDOW_MS);
+  });
+
+  it("a first raise by someone with no base keeps the new-pole grace", async () => {
+    await raiseBy("N", "5000.00:20.00:5000.00", t0);
+    await runPoleProjection(db);
+    expect(await graceOf("5000.00:20.00:5000.00")).toBe(t0.getTime() + NEW_POLE_GRACE_MS);
+  });
+
+  it("⚠️ only the first raise counts: a based player raising later does not shorten someone else's pole", async () => {
+    await soloBase("B");
+    await raiseBy("N", "5000.00:20.00:5000.00", t0);
+    await raiseBy("B", "5000.00:20.00:5000.00", new Date(t0.getTime() + 3_600_000));
+    await runPoleProjection(db);
+    expect(await graceOf("5000.00:20.00:5000.00")).toBe(t0.getTime() + NEW_POLE_GRACE_MS);
   });
 });

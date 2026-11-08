@@ -1,8 +1,9 @@
 import type { Database } from "@factions/db";
 import { poles, servers } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { NEW_POLE_GRACE_MS } from "@factions/domain";
-import { eq, sql } from "drizzle-orm";
+import { NEW_POLE_GRACE_MS, NEW_POLE_MOVE_WINDOW_MS } from "@factions/domain";
+import { basedRaiser, isFirstRaise } from "@factions/declarations";
+import { and, eq, sql } from "drizzle-orm";
 
 /**
  * ⚠️ Distinct from apps/projector's "pole-projector" cursor. That process
@@ -13,7 +14,7 @@ export const POLE_CONSUMER = "pole-projector-bot";
 
 export type PoleProjectionResult = { scanned: number; upserted: number };
 
-type FlagPayload = { texture: string; poleKey: string; pole: { x: number; y: number; z: number } };
+type FlagPayload = { texture: string; poleKey: string; pole: { x: number; y: number; z: number }; dayzId: string | null };
 
 function readFlagPayload(payload: unknown): FlagPayload | null {
   if (typeof payload !== "object" || payload === null) return null;
@@ -21,7 +22,7 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
   const pole = p.pole as Record<string, unknown> | undefined;
   if (typeof p.texture !== "string" || typeof p.poleKey !== "string" || p.poleKey === "") return null;
   if (!pole || typeof pole.x !== "number" || typeof pole.y !== "number" || typeof pole.z !== "number") return null;
-  return { texture: p.texture, poleKey: p.poleKey, pole: { x: pole.x, y: pole.y, z: pole.z } };
+  return { texture: p.texture, poleKey: p.poleKey, pole: { x: pole.x, y: pole.y, z: pole.z }, dayzId: typeof p.dayzId === "string" ? p.dayzId : null };
 }
 
 /**
@@ -78,6 +79,19 @@ export async function runPoleProjection(db: Database, opts: { batchSize?: number
         setWhere: sql`${poles.lastSeenAt} <= ${ev.occurredAt.toISOString()}::timestamptz`,
       }).returning({ id: poles.id });
       out.upserted += written.length;
+
+      // The pole's FIRST raise, by someone who already has a base: they get
+      // NEW_POLE_MOVE_WINDOW_MS to move there, not NEW_POLE_GRACE_MS to
+      // declare. `least` so this only ever shortens the clock — a release or
+      // the runbook's stamp is never lengthened by it. raise-tick sends the
+      // matching notice off the same two reads.
+      if (raised && p.dayzId && await isFirstRaise(db, { serverId: ev.serverId, poleKey: p.poleKey, eventId: ev.id })
+          && await basedRaiser(db, ev.serverId, p.dayzId)) {
+        const moveBy = new Date(ev.occurredAt.getTime() + NEW_POLE_MOVE_WINDOW_MS);
+        await db.update(poles)
+          .set({ graceUntil: sql`least(${poles.graceUntil}, ${moveBy.toISOString()}::timestamptz)` })
+          .where(and(eq(poles.serverId, ev.serverId), eq(poles.map, map), eq(poles.poleKey, p.poleKey)));
+      }
     }
     await writeCursor(db, POLE_CONSUMER, cursor);
   }

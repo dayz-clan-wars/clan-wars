@@ -14,14 +14,16 @@
 <h2>Public</h2>
 <p>Every other pole with a flag on it appears on the <strong>public bases</strong> layer of the map, for every logged-in, linked player: the coordinates and <strong>which flag is flying there</strong>.</p>
 <p>That last part is on purpose. A clan that stashes loot at a second pole under its own colors signs its own name to it. A clan flying somebody else's colors is visibly an impostor. Fly white and you are just one more undeclared base — still public.</p>
-<p>A public base whose flag nobody has raised for <strong>{{PUBLIC_BASE_DESPAWN_MS|days}}</strong> has despawned, and it drops off the map. Raise a flag there again and it is back.</p>
+<p>A public base is only on the map while its flag is up. Lower it and it drops off; raise it again and it is back. One whose flag nobody has raised for <strong>{{PUBLIC_BASE_DESPAWN_MS|days}}</strong> has despawned, and it drops off for good.</p>
+<p><strong>Public bases are worth points.</strong> Lower the flag on one and your clan scores <strong>{{PUBLIC_BASE_BOUNTY_POINTS}}</strong>, once per base. Raise a flag on one and your clan loses {{PUBLIC_BASE_BOUNTY_POINTS}}, every time. Want to keep a spot? Declare it.</p>
 
 <h2>Grace</h2>
 <p>A pole is not published the instant it is seen.</p>
 <ul>
-<li><strong>New pole, never declared: {{NEW_POLE_GRACE_MS|days}}</strong> from the first time the log sees a flag on it. Declare inside the week or it goes on the map. Seven days is also how long DayZ gives you to re-raise a flag before the base starts to decay — one deadline, two reasons to meet it.</li>
+<li><strong>New pole, never declared: {{NEW_POLE_GRACE_MS|days}}</strong> from the first time the log sees a flag on it. Declare inside that window or it goes on the map.</li>
+<li><strong>New pole, and you already have a base: {{NEW_POLE_MOVE_WINDOW_MS|hours}}</strong> from the first flag raised on it. Move your base there in that time or it goes on the map. You'll get a notice when it happens. A solo moves by releasing their base and declaring the new pole on the base page.</li>
 <li><strong>A clan moved out, lapsed, or disbanded: {{RELEASED_POLE_GRACE_MS|days}}.</strong> Long enough to haul loot out before the old spot is on the map.</li>
-<li><strong>Launch day:</strong> every pole standing when Clan Wars goes live gets the 7-day grace from that day.</li>
+<li><strong>Launch day:</strong> every pole standing when Clan Wars goes live gets the new-pole grace from that day.</li>
 </ul>
 
 <h2>When a declaration lapses</h2>
@@ -47,7 +49,7 @@
 
 <h2>Said so nobody is surprised</h2>
 <ul>
-<li>During grace, whoever raises a flag at a half-built pole can declare it. Leave a base undeclared and undefended for a week and someone may simply take it. That is fair play.</li>
-<li>Planting a fresh pole every seven days keeps you in permanent grace. Allowed. Moving the loot is the real cost, not the pole.</li>
+<li>During grace, whoever raises a flag at a half-built pole can declare it. Leave a base undeclared and undefended for a few days and someone may simply take it. That is fair play.</li>
+<li>Planting a fresh pole every {{NEW_POLE_GRACE_MS|n}} days keeps you in permanent grace. Allowed. Moving the loot is the real cost, not the pole.</li>
 <li>The map shows undeclared bases with their flag. It never shows a declared base to anyone but its owners.</li>
 </ul>

@@ -19,9 +19,9 @@ const UID_STRANGER = "B".repeat(40);
 // (1,1,1)/(9,8,7), which the old Flag_White design put well inside the Hub's
 // exclusion zone.
 const P1 = { x: 10000, y: 100, z: 10000 };
-const P2 = { x: 20000, y: 100, z: 20000 };
+const P2 = { x: 6000, y: 100, z: 6000 };
 const P1_KEY = "10000.00:100.00:10000.00";
-const P2_KEY = "20000.00:100.00:20000.00";
+const P2_KEY = "6000.00:100.00:6000.00";
 
 describe("PgRebindStore", () => {
   let db: Database;
@@ -166,10 +166,11 @@ describe("PgRebindStore", () => {
     expect(out.map((r) => r.poleKey)).not.toContain(P2_KEY);
   });
 
-  it("ignores a raise of a different texture", async () => {
+  it("finds a member's raise of ANY flag, not just the clan's own", async () => {
     await raiseAt({ poleKey: "9.00:8.00:7.00", texture: "Flag_Wolf" });
+    await raiseAt({ poleKey: "9.50:8.00:7.00", texture: "Flag_White" });
     const out = await store.qualifyingRaises(await target(), ago(3_600_000));
-    expect(out.map((r) => r.poleKey)).not.toContain("9.00:8.00:7.00");
+    expect(out.map((r) => r.poleKey)).toEqual(expect.arrayContaining(["9.00:8.00:7.00", "9.50:8.00:7.00"]));
   });
 
   it("ignores a raise at a pole another declaration already owns", async () => {
@@ -205,7 +206,7 @@ describe("PgRebindStore", () => {
     expectedPoleKey: P1_KEY,
     poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
     evidenceEventId: p2EventId,
-    at: now, notBefore: ago(604_800_000),
+    at: now,
     ...over,
   });
 
@@ -225,10 +226,10 @@ describe("PgRebindStore", () => {
 
   it("refuses a target within 200 m of another declaration", async () => {
     // A second, solo declaration ~150 m from P2.
-    const nearP2Key = "20150.00:100.00:20000.00";
+    const nearP2Key = "6150.00:100.00:6000.00";
     const [ev] = await raiseAt({ poleKey: nearP2Key, dayzId: "C".repeat(40) });
     await db.insert(declarations).values({
-      serverId, poleKey: nearP2Key, x: "20150.00", y: "100.00", z: "20000.00",
+      serverId, poleKey: nearP2Key, x: "6150.00", y: "100.00", z: "6000.00",
       ownerDayzId: "C".repeat(40), evidenceEventId: ev!.id, declaredAt: ago(999_999),
     });
 
@@ -258,9 +259,23 @@ describe("PgRebindStore", () => {
     expect(await store.rebind(args({ leaderDiscordId: "someone-else" }))).toBe("refused");
   });
 
-  it("refuses inside the cooldown", async () => {
+  it("has no cooldown: a clan that just moved can move again", async () => {
     await db.update(factions).set({ reboundAt: ago(1000) }).where(eq(factions.id, factionId));
-    expect(await store.rebind(args())).toBe("refused");
+    expect(await store.rebind(args())).toBe("ok");
+  });
+
+  it("⚠️ no moving back: the pole the clan just left is refused and off the menu until its grace runs out", async () => {
+    expect(await store.rebind(args())).toBe("ok");
+    const [back] = await raiseAt({ poleKey: P1_KEY, occurredAt: now });
+    const raises = await store.qualifyingRaises(await target(), ago(3_600_000), now);
+    expect(raises.map((r) => r.poleKey)).not.toContain(P1_KEY);
+    expect(await store.rebind(args({ expectedPoleKey: P2_KEY, poleKey: P1_KEY, x: P1.x, y: P1.y, z: P1.z, evidenceEventId: back!.id, at: new Date(now.getTime() + 1000) })))
+      .toBe("moved-back");
+    expect(await declarationForFaction(db, factionId)).toMatchObject({ poleKey: P2_KEY });
+    // Once the old pole's grace is over it can be theirs again.
+    const later = new Date(now.getTime() + RELEASED_POLE_GRACE_MS + 1000);
+    expect(await store.rebind(args({ expectedPoleKey: P2_KEY, poleKey: P1_KEY, x: P1.x, y: P1.y, z: P1.z, evidenceEventId: back!.id, at: later })))
+      .toBe("ok");
   });
 
   it("⚠️ refuses when the pole moved since the candidate was read", async () => {
@@ -293,10 +308,10 @@ describe("PgRebindStore", () => {
     // `lockDeclarations` before the release is what keeps the order the same
     // for everyone. Every legitimate outcome is accepted here; a THROW is
     // the failure.
-    const P3 = { x: 30000, y: 100, z: 30000 };
-    const P4 = { x: 40000, y: 100, z: 40000 };
-    const P3_KEY = "30000.00:100.00:30000.00";
-    const P4_KEY = "40000.00:100.00:40000.00";
+    const P3 = { x: 8000, y: 100, z: 8000 };
+    const P4 = { x: 12000, y: 100, z: 12000 };
+    const P3_KEY = "8000.00:100.00:8000.00";
+    const P4_KEY = "12000.00:100.00:12000.00";
     const UID_WOLF = "W".repeat(40);
 
     const [wolves] = await db.insert(factions).values({
@@ -354,7 +369,7 @@ describe("PgRebindStore", () => {
         expectedPoleKey: P3_KEY,
         poleKey: P4_KEY, x: P4.x, y: P4.y, z: P4.z,
         evidenceEventId: wolfTarget!.id,
-        at: now, notBefore: ago(604_800_000),
+        at: now,
       }),
     ]);
     await new Promise((r) => setTimeout(r, 300));

@@ -23,7 +23,7 @@ export interface FactionStore {
   openCeremonyByIdFor(ceremonyId: number, discordId: string): Promise<OpenCeremony | null>;
   saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void>;
   loadDraft(ceremonyId: number, discordId: string): Promise<{ name: string; tag: string; texture: string } | null>;
-  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close" | "name-taken" | "name-held" | "tag-held">;
+  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "near-edge" | "too-close" | "name-taken" | "name-held" | "tag-held">;
 }
 
 export type ReserveArgs = {
@@ -36,7 +36,7 @@ export type ReserveArgs = {
 
 /** Unwinds the transaction carrying a non-error outcome, the way roster-store's RosterAbort does. */
 class ReserveAbort extends Error {
-  constructor(readonly outcome: "flag-taken" | "too-close" | "pole-taken" | "name-taken" | "name-held" | "tag-held") { super(outcome); }
+  constructor(readonly outcome: "flag-taken" | "near-edge" | "too-close" | "pole-taken" | "name-taken" | "name-held" | "tag-held") { super(outcome); }
 }
 
 export class PgFactionStore implements FactionStore {
@@ -130,7 +130,7 @@ export class PgFactionStore implements FactionStore {
    * or `pole-taken`) is threaded back out through `ReserveAbort` so this
    * transaction unwinds exactly the way a caught unique-violation does.
    */
-  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close" | "name-taken" | "name-held" | "tag-held"> {
+  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "near-edge" | "too-close" | "name-taken" | "name-held" | "tag-held"> {
     try {
       return await this.db.transaction(async (tx) => {
         const claimed = await tx.update(ceremonies)
@@ -208,7 +208,7 @@ export class PgFactionStore implements FactionStore {
           serverId: a.serverId, poleKey: a.poleKey, x: Number(a.x), y: Number(a.y), z: Number(a.z),
           owner: { factionId: f!.id }, evidence: { ceremonyId: a.ceremonyId }, at: a.at,
         });
-        if (!declared.ok) throw new ReserveAbort(declared.reason === "too-close" ? "too-close" : "pole-taken");
+        if (!declared.ok) throw new ReserveAbort(declared.reason === "too-close" || declared.reason === "near-edge" ? declared.reason : "pole-taken");
 
         // The ceremony's participants were standing at the base (spec §4.5
         // ⚠️); the ceremony row is their evidence, so `seen_at_base_event_id`

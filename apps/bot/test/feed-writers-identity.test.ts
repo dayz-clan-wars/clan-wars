@@ -16,9 +16,9 @@ const now = new Date("2026-09-03T12:00:00Z");
 // `declareTx`, which enforces MIN_BASE_SPACING_M — the old (1,2,3)/(9,9,9)
 // fixture sits ~124 m from the Hub and every rebind here would be refused.
 const HOME = { x: 10000, y: 100, z: 10000 };
-const AWAY = { x: 20000, y: 100, z: 20000 };
+const AWAY = { x: 6000, y: 100, z: 6000 };
 const HOME_KEY = "10000.00:100.00:10000.00";
-const AWAY_KEY = "20000.00:100.00:20000.00";
+const AWAY_KEY = "6000.00:100.00:6000.00";
 
 describe("identity changes write feed events", () => {
   let db: Database;
@@ -115,7 +115,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
 
@@ -137,7 +136,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
 
@@ -150,7 +148,6 @@ describe("identity changes write feed events", () => {
     const moved = await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     });
     expect(moved).toBe("ok");
     expect((await events()).map((r) => r.kind)).toEqual(["rebound"]);
@@ -160,7 +157,6 @@ describe("identity changes write feed events", () => {
     expect(await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: "somewhere-else",
       poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
-      notBefore: new Date(now.getTime() - 604_800_000),
     })).toBe("refused");
     expect(await events()).toHaveLength(0);
   });

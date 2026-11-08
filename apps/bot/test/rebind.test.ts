@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  selectCandidates, cooldownRemainingMs,
-  REBIND_COOLDOWN_MS, RELEASE_GRACE_MS,
+  selectCandidates, RELEASE_GRACE_MS,
   type QualifyingRaise,
 } from "@factions/roster/internal";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
@@ -53,37 +52,8 @@ describe("selectCandidates", () => {
   });
 });
 
-describe("cooldownRemainingMs", () => {
-  it("is zero for a faction that has never rebound", () => {
-    expect(cooldownRemainingMs(null, now)).toBe(0);
-  });
-
-  it("is zero once the cooldown has fully elapsed", () => {
-    expect(cooldownRemainingMs(ago(REBIND_COOLDOWN_MS), now)).toBe(0);
-  });
-
-  it("reports what is left inside the cooldown", () => {
-    expect(cooldownRemainingMs(ago(REBIND_COOLDOWN_MS - 5000), now)).toBe(5000);
-  });
-});
-
-describe("the release grace and the rebind cooldown", () => {
-  it("⚠️ RELEASE_GRACE_MS must stay STRICTLY shorter than REBIND_COOLDOWN_MS", () => {
-    // Spec §2.4. At equal values a faction can alternate between two poles and
-    // keep BOTH permanently private: rebind away, the old pole's grace covers
-    // it until the cooldown expires, rebind back. One extra base for the price
-    // of a weekly ritual.
-    //
-    // ⚠️ This reopens SILENTLY. Nothing errors, no behaviour visibly changes,
-    // and no other test fails — a faction just quietly holds two private bases
-    // forever. This assertion is the only thing standing between those two
-    // numbers, and it fails whether someone RAISES the grace or LOWERS the
-    // cooldown.
-    expect(RELEASE_GRACE_MS).toBeLessThan(REBIND_COOLDOWN_MS);
-  });
-
-  it("holds the documented values, so a silent edit to either is visible", () => {
-    expect(REBIND_COOLDOWN_MS).toBe(604_800_000); // 7 days
+describe("the release grace", () => {
+  it("is the rules' released-pole grace (the no-moving-back window)", () => {
     expect(RELEASE_GRACE_MS).toBe(RELEASED_POLE_GRACE_MS);
   });
 });

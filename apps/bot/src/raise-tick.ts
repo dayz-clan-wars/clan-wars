@@ -2,8 +2,8 @@ import type { Database } from "@factions/db";
 import { declarations, defenses, factionMembers, factions, identityLinks, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { appendWarLogTx, appendFactionEventTx, announceFlagChangeTx, completeFlagChangeTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
-import { adoptCarriedTx, declarationForFaction, declareTx } from "@factions/declarations";
-import { CARRIED_ADOPT_RADIUS_M, FLAG_DOWN_MS, NEUTRAL_FLAG, distance2d } from "@factions/domain";
+import { adoptCarriedTx, basedRaiser, declarationForFaction, declareTx, isFirstRaise } from "@factions/declarations";
+import { CARRIED_ADOPT_RADIUS_M, FLAG_DOWN_MS, NEUTRAL_FLAG, NEW_POLE_MOVE_WINDOW_MS, distance2d } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
 import { reviveFactionTx } from "./dormancy-store.js";
@@ -211,6 +211,31 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
           }
         }
 
+        // The pole's FIRST raise, by someone who already has a base: tell
+        // the clan (or the solo) they have NEW_POLE_MOVE_WINDOW_MS to move
+        // there before it goes public. pole-tick shortens the pole's grace
+        // off the same two reads, so the deadline named here is the real one.
+        // ⚠️ Deferred through `last`: clan_notices land after every roster
+        // table (§4.12), and the clan-texture branch below still locks
+        // `factions`. No coordinates in the payload (clan_notices CHECK).
+        let newPoleNoticed = false;
+        if (await isFirstRaise(tx, { serverId: ev.serverId, poleKey: p.poleKey, eventId: ev.id })) {
+          const based = await basedRaiser(tx, ev.serverId, p.dayzId);
+          const publicAt = new Date(ev.occurredAt.getTime() + NEW_POLE_MOVE_WINDOW_MS).toISOString();
+          if (based?.kind === "clan") {
+            const factionId = based.factionId;
+            last.push(() => noticeClanTx(tx, { serverId: ev.serverId, factionId, kind: "new_pole", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, publicAt, link: `${opts.siteBaseUrl}/clan/settings` } }));
+            newPoleNoticed = true;
+          } else if (based?.kind === "solo") {
+            const [link] = await tx.select({ discordId: identityLinks.discordId }).from(identityLinks).where(eq(identityLinks.dayzId, p.dayzId));
+            if (link) {
+              const discordId = link.discordId;
+              last.push(() => noticeUserTx(tx, { serverId: ev.serverId, factionId: null, discordId, kind: "solo_new_pole", occurredAt: ev.occurredAt, payload: { publicAt, link: `${opts.siteBaseUrl}/base` } }));
+              newPoleNoticed = true;
+            }
+          }
+        }
+
         // Undeclared pole, White flag: a full member re-establishing a clan
         // that has no base, the post-wipe case. Clan flags never spawn as
         // loot and the supply kit (the only source of one) needs a bound
@@ -230,7 +255,7 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
               eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full"),
             ))
             .for("update", { of: factions });
-          if (!clan || await declarationForFaction(tx, clan.id)) return done(null);
+          if (!clan || await declarationForFaction(tx, clan.id)) return done(newPoleNoticed ? "noticed" as const : null);
           return done(await bindTx(tx, ev, p, clan));
         }
 
@@ -241,7 +266,7 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
         const [owner] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status }).from(factions)
           .where(and(eq(factions.serverId, ev.serverId), eq(factions.texture, p.texture), sql`${factions.status} in ('reserved','active','dormant')`))
           .for("update");
-        if (!owner || owner.status === "reserved") return done(null); // activation is ceremony-tick's
+        if (!owner || owner.status === "reserved") return done(newPoleNoticed ? "noticed" as const : null); // activation is ceremony-tick's
         const [full] = await tx.select({ id: factionMembers.id }).from(factionMembers)
           .where(and(eq(factionMembers.factionId, owner.id), eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full")));
         if (!full) {
@@ -251,13 +276,12 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
 
         // §8.5: a holding clan with NO declaration binds one on the first
         // `flag.raised` of its texture by a full member, at any free pole —
-        // the post-wipe case. A clan that still has a declaration keeps
-        // today's rebind-proposal path unchanged.
+        // the post-wipe case. A clan that still has a declaration moves
+        // through the site; the first-raise notice above told it so.
+        // (`rebind_proposed` is no longer written; its renderer stays for
+        // old rows.)
         const existing = await declarationForFaction(tx, owner.id);
-        if (existing) {
-          await noticeClanTx(tx, { serverId: ev.serverId, factionId: owner.id, kind: "rebind_proposed", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, link: `${opts.siteBaseUrl}/clan/settings` } });
-          return done("noticed" as const);
-        }
+        if (existing) return done(newPoleNoticed ? "noticed" as const : null);
 
         return done(await bindTx(tx, ev, p, owner));
       });
