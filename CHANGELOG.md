@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-11-08
+
 ### Added
 
 - **Raid breakdowns.** Every raid your clan lands now posts a breakdown in your clan channel and in each member's DMs. It shows what the other clan was worth and why, whether anyone from their clan was online, the points you scored, and how your price and theirs moved.
