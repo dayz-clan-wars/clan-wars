@@ -20,3 +20,4 @@ export {
   ONLINE_TITLE, ONLINE_EMPTY, flagDownDuration,
 } from "./live-feed";
 export { PRICE_TITLE, PRICE_FOOTER, priceRow, priceReasons, priceBlock, priceReasonLines, dormantLine, priceList, type PriceView } from "./scoreboard";
+export { raidScoredCopy, type RaidScoredView } from "./raid-scored";

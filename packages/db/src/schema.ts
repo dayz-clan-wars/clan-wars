@@ -925,6 +925,14 @@ export const raids = pgTable("raids", {
   victimOnline: boolean("victim_online").notNull().default(false),
   /** True when the raid isn't at the victim's own declared base. */
   away: boolean("away").notNull().default(false),
+  /**
+   * The raiding clan's `factions.status` at the first lower, null for a solo
+   * raid. Only `active` scores (`raidScores`). ⚠️ Null on a clan raid means
+   * the row predates the rule and keeps its old price on a rescore; status
+   * history is not recorded anywhere else, so this column is the only thing
+   * that lets a rescore tell a dormant clan's raid from an active one's.
+   */
+  raiderStatus: text("raider_status"),
   weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
 }, (t) => ({
   uniqFirstLower: uniqueIndex("raids_first_lower_uniq").on(t.firstLowerEventId),

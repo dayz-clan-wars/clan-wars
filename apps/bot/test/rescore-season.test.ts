@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factionMembers, events, admFiles, alphaWeeks,
+  servers, factions, factionMembers, events, admFiles, alphaWeeks,
   raids, seasonStandings, warLogEvents, clanNotices, membershipHistory, playerSessions,
   type Database,
 } from "@factions/db";
@@ -151,6 +151,26 @@ describe("rescoreSeason", () => {
     expect(await db.select().from(seasonStandings).orderBy(asc(seasonStandings.factionId))).toEqual(standings);
     expect(standings.find((s) => s.factionId === A)).toMatchObject({ points: 150, raids: 2 });
     expect(standings.find((s) => s.factionId === D)).toMatchObject({ points: 0, timesRaided: 1 });
+  });
+
+  it("prices by the raider status recorded on the row, never the clan's status today", async () => {
+    const rows = await db.select().from(raids).orderBy(asc(raids.id));
+    const [ab, bc, cb] = rows;
+    // B was dormant when it raided C: that row pays 0. C raided B while active
+    // and is dormant today: that row still pays. A's row predates the rule
+    // (null status) and keeps the old pricing.
+    await db.update(raids).set({ raiderStatus: "dormant" }).where(eq(raids.id, bc!.id));
+    await db.update(raids).set({ raiderStatus: "active" }).where(eq(raids.id, cb!.id));
+    await db.update(factions).set({ status: "dormant" }).where(eq(factions.id, C));
+    await rescoreSeason(db, seasonId, { apply: true });
+    const expected = new Map((await expectedPoints()).map((e) => [e.id, e.points]));
+    const after = new Map((await db.select().from(raids)).map((r) => [r.id, r.points]));
+    expect(after.get(bc!.id)).toBe(0);
+    expect(after.get(cb!.id)).toBe(expected.get(cb!.id));
+    expect(after.get(cb!.id)).toBeGreaterThan(0);
+    expect(after.get(ab!.id)).toBe(expected.get(ab!.id));
+    const [bStanding] = await db.select().from(seasonStandings).where(eq(seasonStandings.factionId, B));
+    expect(bStanding!.points).toBe(0);
   });
 
   it("re-running apply is a no-op", async () => {

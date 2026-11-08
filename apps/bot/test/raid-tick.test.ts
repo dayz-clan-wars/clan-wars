@@ -101,6 +101,59 @@ describe("raidTick", () => {
     ]));
   });
 
+  it("an active raider is told what it scored and how both values moved, in its channel and every member's DM", async () => {
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const rows = await db.select({ factionId: clanNotices.factionId, target: clanNotices.target, to: clanNotices.discordTargetId, payload: clanNotices.payload })
+      .from(clanNotices).where(eq(clanNotices.kind, "raid_scored"));
+    expect(rows.map((r) => [r.factionId, r.target, r.to])).toEqual(expect.arrayContaining([[WOLF, "channel", null], [WOLF, "dm", "dW1"]]));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.payload).toMatchObject({
+      gamertag: "Wolfie", raiderTag: "WOLF", raiderStatus: "active", victimTag: "BEAR",
+      points: BASE_OFFLINE, fullPrice: BASE_OFFLINE, online: false, mult: 0.75,
+      victimValue: 100, victimBase: 100, victimHeat: 0, victimHitPct: 100, victimNewUntil: null,
+      // One raid halves BEAR at the instant it lands; WOLF gains a full RAID_HEAT.
+      victimValueAfter: 50, raiderValueBefore: 100, raiderValueAfter: 150, raiderNewUntil: null,
+    });
+  });
+
+  it("a dormant clan's raid scores 0 but still raises its own value and still hits the victim", async () => {
+    await db.update(factions).set({ status: "dormant", dormantSince: now, dormantReason: "inactive" }).where(eq(factions.id, WOLF));
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    expect(await raidTick(db)).toMatchObject({ raids: 1 });
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ raiderFactionId: WOLF, raiderStatus: "dormant", points: 0 });
+    const standings = await db.select().from(seasonStandings).orderBy(seasonStandings.factionId);
+    expect(standings.map((s) => [s.factionId, s.points, s.timesRaided])).toEqual([[BEAR, 0, 1], [WOLF, 0, 0]]);
+    // The row is a raid fact like any other: once WOLF is active again it is
+    // priced with the heat, and BEAR is priced with the hit.
+    const facts: RaidFact[] = (await db.select().from(raids)).map((r) => ({ id: r.id, at: r.firstLowerAt, raiderFactionId: r.raiderFactionId, victimFactionId: r.victimFactionId }));
+    const later = new Date(now.getTime() + 60_000);
+    expect(clanValue({ id: WOLF, activatedAt: established }, facts, later)).toBeGreaterThan(149);
+    expect(clanValue({ id: BEAR, activatedAt: established }, facts, later)).toBeLessThan(51);
+    const notes = await db.select({ target: clanNotices.target, payload: clanNotices.payload }).from(clanNotices).where(eq(clanNotices.kind, "raid_scored"));
+    expect(notes.map((n) => n.target).sort()).toEqual(["channel", "dm"]);
+    expect(notes[0]!.payload).toMatchObject({ raiderStatus: "dormant", points: 0, fullPrice: BASE_OFFLINE, raiderValueBefore: 100, raiderValueAfter: 150 });
+  });
+
+  it("a reserved clan's raid scores 0 and reports no value of its own", async () => {
+    await db.update(factions).set({ status: "reserved", activatedAt: null, reservedUntil: new Date(now.getTime() + 86_400_000) }).where(eq(factions.id, WOLF));
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ raiderStatus: "reserved", points: 0 });
+    const [n] = await db.select({ payload: clanNotices.payload }).from(clanNotices).where(eq(clanNotices.kind, "raid_scored"));
+    expect(n!.payload).toMatchObject({ raiderStatus: "reserved", points: 0, raiderValueBefore: null, raiderValueAfter: null });
+  });
+
+  it("a solo raid records no raider status and tells nobody it scored", async () => {
+    await lower(S1, "Solo", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ raiderFactionId: null, raiderStatus: null, points: 0 });
+    expect(await db.select().from(clanNotices).where(eq(clanNotices.kind, "raid_scored"))).toEqual([]);
+  });
+
   it("a second lower by the same clan inside 24 h is absorbed; a different clan's is a new raid", async () => {
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await lower(W1, "Wolfie", "Flag_Bear", P1, new Date(now.getTime() + 3_600_000));
@@ -197,7 +250,8 @@ describe("raidTick", () => {
     // ⚠️ Same war-log line as a base raid: saying "away" would hint where the base is NOT.
     expect(log).toMatchObject({ kind: "raid", payload: { raiderClan: "WOLF", victimClan: "BEAR", gamertag: "Wolfie", solo: false, points: BASE_OFFLINE } });
     expect(Object.keys(log!.payload as object).sort()).toEqual(["gamertag", "points", "raiderClan", "raiderTag", "solo", "victimClan", "victimTag"]);
-    const notices = await db.select({ target: clanNotices.target, kind: clanNotices.kind, payload: clanNotices.payload }).from(clanNotices);
+    // The victim's side only: the raider's own raid_scored notice is covered above.
+    const notices = await db.select({ target: clanNotices.target, kind: clanNotices.kind, payload: clanNotices.payload }).from(clanNotices).where(eq(clanNotices.factionId, BEAR));
     expect(notices).toEqual([{ target: "channel", kind: "flag_lowered_away", payload: { gamertag: "Wolfie", raiderClan: "WOLF" } }]);
   });
 
@@ -212,7 +266,8 @@ describe("raidTick", () => {
     const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
     expect(bear).toEqual({ f: later, by: W1 });
     const kinds = (await db.select({ kind: clanNotices.kind, target: clanNotices.target }).from(clanNotices)).map((n) => `${n.kind}:${n.target}`).sort();
-    expect(kinds).toEqual(["flag_down:channel", "flag_down:dm", "flag_lowered_away:channel"]);
+    // One raid_scored pair, from the away raid: the absorbed base lower scores nothing, so it tells the raider nothing.
+    expect(kinds).toEqual(["flag_down:channel", "flag_down:dm", "flag_lowered_away:channel", "raid_scored:channel", "raid_scored:dm"]);
     // Scoring follows the ordinary dedup rule: one raid, one price.
     expect(await db.select({ c: raids.lowerCount }).from(raids)).toEqual([{ c: 2 }]);
   });
