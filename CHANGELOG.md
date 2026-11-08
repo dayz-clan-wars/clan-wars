@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-11-08
+
 ### Added
 
 - **Public bases are worth points.** Lower the flag on a public base and your clan scores 50 points, once per base. Raise a flag on one and your clan loses 50, every time. Both count toward your season total and the weekly Alpha ranking. Your clan channel tells you when it happens. A public base only shows on the map while its flag is up.
