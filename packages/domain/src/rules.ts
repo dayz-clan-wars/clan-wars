@@ -101,8 +101,6 @@ export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
-/** Fri 14:00 → Sun 14:00 UTC (0 = Sunday). Enforced by the game server's config, not here. */
-export const RAID_WINDOW = { openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 } as const;
 
 // Defending
 export const FLAG_DOWN_MS = 24 * HOUR;
@@ -461,7 +459,7 @@ export const WELL_RADIUS_M = 5;
 // ─── Scoring week (spec 2026-11-06-raid-value-scoring §3, §6) ────────────────
 
 /**
- * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC, the close of the raid window.
+ * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC (the close of the old weekend raid window; raiding is now 24/7).
  * ⚠️ Fixed, not derived from a season or a clock: an owner decision on 2026-11-06. Moving it re-keys `raids.week_start` and `alpha_weeks.week_start` for weeks already stored.
  */
 export const SCORING_WEEK_CUTOVER = new Date("2026-11-08T14:00:00Z");

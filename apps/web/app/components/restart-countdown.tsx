@@ -7,10 +7,8 @@ import { restartColumn, type RestartColumn } from "@/lib/timer-bar";
 /**
  * The restart column's value and its draining rule.
  *
- * ⚠️ Every second, unlike `RaidCountdown`'s 30s. The two clocks are deliberately
- * different: a raid window is days long and a ticking display there only invites
- * reloading, while this one is a two-hour cycle whose last ten minutes are the
- * whole point — that is when a player decides whether to log out somewhere safe.
+ * ⚠️ Every second: this is a two-hour cycle whose last ten minutes are the whole
+ * point — that is when a player decides whether to log out somewhere safe.
  *
  * ⚠️ The slot is RECOMPUTED every tick rather than counted down to an instant the
  * server picked once. Counting to a fixed target means a tab left open across a
@@ -26,7 +24,7 @@ import { restartColumn, type RestartColumn } from "@/lib/timer-bar";
 export function RestartCountdown({ initial, valueClass, rule = true }: { initial: RestartColumn; valueClass: string; rule?: boolean }) {
   // ⚠️ Seeded from the server's own computation for the first paint; the clock
   // starts after mount, or React reports a hydration mismatch and discards the
-  // markup. Same discipline as RaidCountdown, and the same reason.
+  // markup.
   const [c, setC] = useState(initial);
   useEffect(() => {
     const tick = () => {

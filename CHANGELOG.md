@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Raiding is on around the clock. Bases can be damaged at any time, not just on weekends. The raid window countdown is gone from the site, and the guide is updated.
+
 ### Removed
 
 - King of the Hill. Events, `/koth` and `/kothvote` are gone. Past results and any prizes already won stay.

@@ -488,7 +488,7 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
   // invisible on the one page raiders plan from, and the install strip's
   // buttons still tabbable underneath. The map's top follows the strips'
   // measured height instead. Today the strips are hidden on /map
-  // (lib/site-strips.ts; the clocks ride in the bar as MapTimers), so this
+  // (lib/site-strips.ts; the restart clock rides in the bar as MapTimers), so this
   // measures 0 — kept so a strip that ever shows here moves the map, never hides under it.
   // Before the first measure, `top-bar` (the class) holds the map under the
   // bar alone.
@@ -1137,7 +1137,7 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
             </div>
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
-            {/* The raid and restart clocks, here because the strips above the map stand down on /map. */}
+            {/* The restart clock, here because the strips above the map stand down on /map. */}
             <MapTimers columns={timers} variant="bar" />
             {/* The readout: under the mouse, else the centre. A click copies it. */}
             <MapReadout map={mapReady ? map.current : null} size={size} centre={centre} variant="bar" />
@@ -1187,7 +1187,7 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
             {/* The item view on a phone: in this bar, so the map's inset grows with it and no spot hides under it. */}
             {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" card={shownCard && <ItemCardView model={shownCard} variant="sheet" />} />}
             {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
-            {/* The clocks the strips carried on every other page: one row, over the readout. */}
+            {/* The clock the strips carried on every other page: one row, over the readout. */}
             <div className={layersOpen ? "border-t border-rule-2" : ""}>
               <MapTimers columns={timers} variant="row" />
             </div>

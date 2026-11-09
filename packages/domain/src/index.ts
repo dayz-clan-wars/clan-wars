@@ -19,7 +19,6 @@ export * from "./achievements";
 export * from "./streaks";
 export * from "./restarts";
 export * from "./referrals";
-export * from "./raid-window";
 export * from "./retired-airdrops";
 export * from "./enforcement";
 export * from "./booster-kit";

@@ -14,7 +14,7 @@ const LABELS = [
   "Link: emotes to perform", "Link: time limit", "Unlinked gamertag: play time before a ban", "Starting a link lifts the ban for",
   "Flags in the pool", "Ceremony: linked players required", "Ceremony: window", "Claim window after ceremony", "Activation window after claim", "Clan name length", "Clan tag length",
   "Declarations per player", "New pole grace before public", "New pole raised by someone who already has a base: move there within", "Released pole grace before public", "Public base despawns after (no flag raise)", "Points for lowering a public base's flag (once per base) / lost for raising one", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
-  "Same clan raiding the same victim counts once per", "Raid window (base damage on)",
+  "Same clan raiding the same victim counts once per", "When bases can be raided",
   "A raid pays: an established clan's starting value", "Added to your value by each raid you land", "That bonus fades to nothing over", "Each time you are raided your value halves, recovering over", "A clan is worth 0 for its first", "Points multiplier: someone from the clan is online", "Points multiplier: nobody is online",
   "Flag-down clock", "Inactivity → dormant", "Dormant → disbanded",
   "Weekly weapon kit lasts (days)", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "After a wipe: a new pole this close to your old base becomes your base", "Player board: minimum kills for K/D",
@@ -40,7 +40,7 @@ describe("GUIDE_NUMBERS (the appendix)", () => {
     const v = Object.fromEntries(GUIDE_NUMBERS.map((r) => [r.label, r.value]));
     expect(v["Link: time limit"]).toBe("24 h");
     expect(v["Flags in the pool"]).toBe(`${R.FLAG_POOL_SIZE} (white is neutral)`);
-    expect(v["Raid window (base damage on)"]).toBe("Fri 14:00 → Sun 14:00 UTC");
+    expect(v["When bases can be raided"]).toBe("any time");
     expect(v["A raid pays: an established clan's starting value"]).toBe("100");
     expect(v["Added to your value by each raid you land"]).toBe("50");
     expect(v["That bonus fades to nothing over"]).toBe("14 days");

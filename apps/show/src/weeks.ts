@@ -9,7 +9,7 @@ export type WeekWindow = { from: Date; to: Date };
  *
  * ⚠️ Refuses anything but a scoring week start (Monday 00:00 UTC before the cutover, Sunday 14:00 UTC after): every read in `src/story/` keys on
  * `raids.week_start`, which is exactly that instant, and a window that starts an hour
- * off would silently split a raid weekend across two episodes.
+ * off would silently split a week's raids across two episodes.
  */
 export function weekWindow(weekStart: Date): WeekWindow {
   if (scoringWeekStartOf(weekStart).getTime() !== weekStart.getTime()) {

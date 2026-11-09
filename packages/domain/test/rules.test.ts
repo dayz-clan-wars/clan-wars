@@ -56,7 +56,6 @@ describe("rules", () => {
     expect(R.WATCHTOWER_MAX_HEIGHT).toEqual({ grounded: 2, onStructure: 1 });
     expect(R.VOTE_THRESHOLD).toEqual({ num: 2, den: 3 });
     expect(R.HUB_POSITION).toEqual({ x: 100, z: 93 });
-    expect(R.RAID_WINDOW).toEqual({ openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 });
   });
 
   it("⚠️ keeps the watch zone at half the spacing so zones never overlap", () => {

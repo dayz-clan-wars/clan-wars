@@ -31,7 +31,6 @@ import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
 import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
-import { raidWindowTick } from "./raid-window-tick.js";
 import { referralAwardTick } from "./referral-award-tick.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
@@ -1821,32 +1820,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
-      }
-    }
-
-    // ⚠️ After the restart tick, same reason the announce tick is: a slow Discord
-    // call must not delay a due restart. Its own try/catch, like every step.
-    // ⚠️ Gated on the flag alone, not `&& serverEventsPoster` — config load refuses
-    // RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is
-    // guaranteed non-null here. Gating on it too would make a refused flip's
-    // alert disappear along with the tick whenever the channel is unset — exactly
-    // the silent-alert-loss this feature must not have.
-    if (cfg.raidWindow.enabled) {
-      try {
-        // ⚠️ Gated like WAR_LOG_CHANNEL_ID: an unset OPS_CHANNEL_ID falls back to
-        // logging the failure alert at error level and nothing else — that is how
-        // the rest of this codebase degrades, not a regression.
-        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        // ⚠️ Non-null by construction: config load throws if RAID_WINDOW_TICK is on
-        // without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster was built above.
-        const r = await raidWindowTick(db, { announce: serverEventsPoster!, ops: opsPoster }, { now: new Date() });
-        if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
-      } catch (err) {
-        console.error("raid window tick failed", err);
       }
     }
 
@@ -1937,9 +1914,6 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
     else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}; fixed: ${FIXED_WEEKLY_WIPES.map((w) => `${w.name} (UTC day ${w.utcDay})`).join(", ")}`);
-
-    if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
-    else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
 
     if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
     if (!cfg.raidAward.enabled) console.warn("RAID_AWARD_TICK is off: weeks still close, but the top raiding clan gets no weapon kit.");

@@ -1972,6 +1972,13 @@ export const releaseAnnouncements = pgTable("release_announcements", {
 }));
 
 /**
+ * ⚠️ History: raiding is 24/7 (unreleased after v2.21.0). Base damage is always on in
+ * the mission's cfggameplay.json and the bot never flips it, so nothing writes
+ * `raid_window_flips`, `raid_window_skips` or `raid_window_announcements` any more,
+ * and nothing reads them. The rows stay; drop the tables in a migration only on
+ * purpose. The notes below describe how they were written.
+ */
+/**
  * One row per raid-window boundary actually brought into effect, per server.
  *
  * ⚠️ `boundary_at` is the WINDOW BOUNDARY, not the restart slot. A repair write at

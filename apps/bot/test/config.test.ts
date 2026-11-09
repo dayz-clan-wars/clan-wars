@@ -317,41 +317,12 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("RAID_WINDOW_TICK", () => {
-    it("is off by default", () => {
-      expect(loadConfig(OK).raidWindow.enabled).toBe(false);
-    });
-
-    it("⚠️ refuses RAID_WINDOW_TICK without RESTART_SCHEDULE", () => {
-      // Same failure shape as TRUCK_WIPE_EVENTS above: the flip only takes
-      // effect at a restart, so it must ride on RESTART_SCHEDULE.
-      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1" })).toThrow(/RESTART_SCHEDULE/u);
-    });
-
-    it("accepts RAID_WINDOW_TICK with RESTART_SCHEDULE on", () => {
-      const c = loadConfig({
-        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
-      });
-      expect(c.raidWindow.enabled).toBe(true);
-    });
-
-    it("accepts the 'true' spelling, matching every other boolean flag", () => {
-      const c = loadConfig({
-        ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
-      });
-      expect(c.raidWindow.enabled).toBe(true);
-    });
-
-    it("refuses RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
-      // The advance/open/close notices are the player-facing point of this
-      // feature; with no channel to post them to it is misconfigured, not
-      // merely degraded — unlike OPS_CHANNEL_ID, which has a real fallback
-      // (an error-level log line).
-      expect(() => loadConfig({
-        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt", SERVER_EVENTS_CHANNEL_ID: undefined,
-      })).toThrow(/RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
+  // Raiding is 24/7: the bot never flips base damage any more. A production .env
+  // that still sets the old flag must load.
+  describe("retired RAID_WINDOW_TICK", () => {
+    it("is ignored", () => {
+      const cfg = loadConfig({ ...OK, RAID_WINDOW_TICK: "1" });
+      expect(cfg).not.toHaveProperty("raidWindow");
     });
   });
 

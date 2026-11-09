@@ -259,17 +259,8 @@ anything.
   it removes nobody and alerts ops once), which reverses ruling 10. `/guest grant`/`/guest revoke` are real commands now (`commands/guest.ts`)
   — see below; the hand-written `handleGuestCommand` and its channel-bound `/guest user:`
   form are gone as of plan 2.
-  Since raid-window-automation, `discord.ts` also runs `raid-window-tick.ts` alongside
-  the restart tick, gated on `RAID_WINDOW_TICK`: after `restart-tick.ts` (the flip only
-  ever takes effect at a restart, so it has to land first) and before `announce-tick.ts`
-  (both, like the restart tick, run last among the Discord posters, so a slow Nitrado or
-  Discord call never delays a due restart). It is level-triggered the same way the truck
-  wipe is — every slot recomputes what `GeneralData.disableBaseDamage` should be and
-  repairs a lost or hand-reverted write — and posts advance/open/close notices to
-  `SERVER_EVENTS_CHANNEL_ID` (the same channel the weekly vehicle wipe
-  posts to, since `docs/deploy/2026-09-21-server-events-channel.md`) plus a
-  once-per-boundary failure alert to `OPS_CHANNEL_ID` (or an error-level log line if
-  that is unset). See `docs/deploy/raid-window.md`.
+  (The raid-window tick that ran after `restart-tick.ts` is gone: raiding is 24/7 — see the
+  "(History) The raid window" row below.)
   Since the Live page, each of the four website recorders (`apps/bot/src/live-recorder.ts`:
   kill, hit, killstreak, long-range) runs right after its Discord poster, inline in the same
   tick. They are never gated on a channel: each has its own `*-feed-recorder` cursor and
@@ -433,7 +424,7 @@ anything.
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
 | Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
-| The raid window, opened and closed by the bot on the restart slots | `packages/domain/src/raid-window.ts` (`raidWindowAt`, level-triggered against `RAID_WINDOW`), the surgical edit in `apps/bot/src/cfggameplay.ts`, the tick in `apps/bot/src/raid-window-tick.ts` (gated on `RAID_WINDOW_TICK`; requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`, degrades on missing `OPS_CHANNEL_ID`), `raid_window_flips`/`raid_window_skips`/`raid_window_announcements` (migration `0037_fresh_moira_mactaggert.sql`), `pnpm raid:skip` (`scripts/raid-skip.ts`) to record a deliberately skipped weekend. `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
+| (History) The raid window | Gone (unreleased after v2.21.0): raiding is 24/7. Base damage is always on, set once in the nasdara repo's `cfggameplay.json` (`disableBaseDamage: false`), and the bot never reads or writes that file. Deleted: `raid-window-tick.ts`, `raid-window-text.ts`, `apps/bot/src/cfggameplay.ts` and the restart tick's `applyGameplay`, `packages/domain/src/raid-window.ts` (`raidWindowAt`) and `RAID_WINDOW`, the roster's `baseDamageWindow`, the site timer bar's raid column, `pnpm raid:skip` and the runbook-drift test. `raid_window_flips`/`raid_window_skips`/`raid_window_announcements` (migration `0037_fresh_moira_mactaggert.sql`) stay with their rows; nothing writes or reads them. The scoring week still closes Sunday 14:00 UTC — it only used to coincide with the window's close. `RAID_WINDOW_TICK` is ignored. Old runbook: `docs/deploy/raid-window.md` |
 | Raid value scoring (a raid pays the victim clan's live price), the weekly raid award, and the season rescore | Pure maths in `packages/domain/src/raid-value.ts` (`clanValue`, `raidPoints`, `valueReasons`: value = (`RAID_VALUE_BASE` + heat) × hit halvings, from season raid rows) and `scoring-week.ts` (`scoringWeekStartOf`/`scoringWeekEnd`, Sunday 14:00 UTC weeks, the bridging week). Detection in `apps/bot/src/raid-detect.ts` (`classifyLower`, with the replay option; base raids, own-flag-on-your-base raids, away raids from a member's raise), pricing and the online flag in `raid-tick.ts` (away raids queue the `flag_lowered_away` notice). Rescore in `apps/bot/src/rescore.ts` via `pnpm rescore:season` (`scripts/rescore-season.ts`); runbook `docs/deploy/2026-11-06-raid-value.md`. Weekly kit in `apps/bot/src/raid-award.ts` (`payRaidAwards`, gated on `RAID_AWARD_TICK`, record in `raid_award_weeks`). The price list: `packages/roster/src/scoring.ts` (`clansOnlineAt`), `packages/copy/src/scoreboard.ts`, `apps/bot/src/scoreboard-post.ts`. Constants in `rules.ts`, numbers in the guide via `guide-numbers.ts`. ⚠️ A raid's own row never prices itself: pass `excludeRaidId` to `clanValue`, or a replay prices a raid against itself. ⚠️ `SCORING_WEEK_CUTOVER` (2026-11-08T14:00Z) is fixed, not derived; weeks closed before it are frozen (old `week_start`, `alpha_weeks`, no kit), and moving it re-keys stored weeks. ⚠️ One lowering is never two raids: at a declared pole the base rule wins for a non-member, and the own-flag-on-your-base rule fires only when the lowerer is that base's own member. ⚠️ The rescore is re-runnable, dry-run by default, and inserts away raids only (it rewrites `points` and `victim_online`, never `week_start`); run it with the bot stopped. ⚠️ The price shown equals the price paid: `clansOnlineAt` in roster and `clanOnlineAt` in raid-detect are twin online queries, so change them together. ⚠️ `raid_award_weeks` is the payment record: its insert is the idempotency guard, and `RAID_AWARD_FIRST_WEEK` keeps old ranked weeks from paying. |
 | Link to play (an unlinked gamertag gets one hour of play, then an `unlinked` ban) | Rule `packages/domain/src/link-gate.ts` (constants `LINK_TO_PLAY_*`, `LINK_SWEEP_*` in `rules.ts`); the tick `apps/bot/src/link-gate-tick.ts` runs per server just before `banTick`, gated on `LINK_TO_PLAY` (`off`/`dry`/`on`, requires `ENFORCEMENT_TICK`) and never calls Nitrado; `identity_link_ends` (migration 0074, written by an AFTER DELETE trigger on `identity_links`) is how a lost link is seen; `bans.nitrado_added` lets `banTick` remove only what a ban added, and `bans.nitrado_attempted` (migration 0075, from `BanWriteError.attempted`) what a failed `addBans` may have written; the hourly guild sweep `apps/bot/src/guild-sweep.ts`, run only with `LINK_TO_PLAY=on` (`dry` touches nothing). ⚠️ The gate never closes a `pending` row with `attempts > 0`: its names may be on the list. ⚠️ `LINK_TO_PLAY_FROM` is a fixed instant set by release, not derived. ⚠️ Only `reason = 'unlinked'` rows are written, lifted or closed by it; roll back by setting them `lift_pending`, never `lifted`. ⚠️ `dry` reports each gamertag once per process. Spec `docs/superpowers/specs/2026-11-06-link-to-play-design.md`, runbook `docs/deploy/2026-11-10-link-to-play.md` |
 | Acceptance records | `docs/acceptance/` |
@@ -904,8 +895,8 @@ text, opposite meanings. Read a zero-row result together with `select count(*) f
 factions`, or it proves nothing.
 
 Increment 8 (launch) merged on 2026-09-07: `/guide` redirects to the
-guide's host (superseded 2026-09-07: the guide now lives in `apps/web`), `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` is the
-twice-weekly base-damage flip, and `docs/deploy/2026-09-10-launch.md` is the order every
+guide's host (superseded 2026-09-07: the guide now lives in `apps/web`), `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` was the
+twice-weekly base-damage flip (superseded: raiding is 24/7), and `docs/deploy/2026-09-10-launch.md` is the order every
 unapplied runbook (2b → 7) reaches `factions_live` in, plus the acceptance. Deployed to `factions_live` on 2026-09-08 as one consolidated deploy (migrations 0020–0028 together; the database held zero clans): `docs/acceptance/2026-09-08-launch.md`. Launch instant `2026-09-08T00:39:17Z`; poles in grace until 2026-09-15.
 
 ### Known-open, in rough priority order

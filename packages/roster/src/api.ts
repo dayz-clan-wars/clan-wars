@@ -51,7 +51,6 @@ import {
   type GuestGrantOutcome, type GuestTargetRef,
 } from "./guest";
 import { attentionDb, type Attention } from "./attention";
-import { baseDamageWindowDb, type BaseDamageWindow } from "./base-damage-window";
 import { liveServersDb, type LiveServer } from "./servers";
 import { liveFeedDb, onlineNowDb, type LiveRow, type LiveQuery, type OnlinePlayerRow } from "./live";
 import type { LiveFeed } from "@factions/domain";
@@ -88,7 +87,6 @@ export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export type { GuestGrantOutcome, GuestTargetRef };
 export type { Attention };
-export type { BaseDamageWindow };
 export type { LiveServer };
 export type { LiveRow, LiveQuery, OnlinePlayerRow };
 export type { AchievementWall, AchievementTile, AchievementSubject };
@@ -122,9 +120,6 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
   return {
     /** The site bar's two counts: what is waiting on you (/me) and on your clan (/clan). Read on every page, so it is cheap. */
     attention: (discordId: string): Promise<Attention> => attentionDb(getDb(), discordId, getNow()),
-
-    /** The status strip's base-damage line: live/closed/unconfirmed/skipped, from a CONFIRMED flip — never the clock's guess. */
-    baseDamageWindow: (): Promise<BaseDamageWindow> => baseDamageWindowDb(getDb(), getNow()),
 
     /** The server strip under the top bar: each live server's in-game name as Nitrado last reported it. The same for every viewer. */
     liveServers: (): Promise<LiveServer[]> => liveServersDb(getDb()),

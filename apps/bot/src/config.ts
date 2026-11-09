@@ -154,12 +154,6 @@ export type BotConfig = {
   /** Truck wipe. `events` empty means off; the window is only meaningful when it is not. */
   truckWipe: { events: string[]; offHour: number; onHour: number; rotation: boolean };
   /**
-   * Gates the raid-window flip on the restart slots. Off by default, same
-   * reasoning as `achievementsTick`/`truckWipe`: the flip only takes effect
-   * at a restart, so it rides on `restartSchedule` and is refused without it.
-   */
-  raidWindow: { enabled: boolean };
-  /**
    * Gates the bounty tick and its poster (spec 2026-09-23-bounties). `/bounty place`
    * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
    */
@@ -177,13 +171,13 @@ export type BotConfig = {
   /** Gates only the weekly weapon kit for the top raiding clan (`raid-award.ts`); runs on the main tick, right after the week close. */
   raidAward: { enabled: boolean };
   /**
-   * Where the raid window, the weekly vehicle wipe, bounties and
-   * referral payouts announce themselves. Fatal when any gated one is on and
+   * Where the weekly vehicle wipe, bounties and referral
+   * payouts announce themselves. Fatal when any gated one is on and
    * this is unset — see the load-time checks below.
    */
   serverEventsChannelId: string | undefined;
   /**
-   * Where the raid-window tick posts its failure alert. Optional, gated like
+   * Where operator alerts post. Optional, gated like
    * `warLogChannelId` — unset means the alert falls back to an error-level
    * log line and nothing else, not a regression.
    */
@@ -497,7 +491,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       onHour: wipeHour(env, "TRUCK_WIPE_ON_HOUR", 10),
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
-    raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     wellAwards: { enabled: ["1", "true"].includes((env.WELL_AWARD_TICK ?? "").trim().toLowerCase()) },
     raidAward: { enabled: ["1", "true"].includes((env.RAID_AWARD_TICK ?? "").trim().toLowerCase()) },
@@ -552,25 +545,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // neither would ever fire at all — no error, no log, just a wipe that never happens.
   if ((config.truckWipe.events.length > 0 || config.truckWipe.rotation) && !config.restartSchedule) {
     throw new Error("TRUCK_WIPE_EVENTS or WEEKLY_VEHICLE_WIPE is set but RESTART_SCHEDULE is off — both run on the restart slots, so nothing would ever fire them.");
-  }
-  // ⚠️ Same failure shape as the truck wipe's check just above: the flip only
-  // takes effect when the server restarts, and restarts come from the restart
-  // slots. On without RESTART_SCHEDULE would write a file nobody ever reloads —
-  // the silent no-op class this repo refuses to ship.
-  if (config.raidWindow.enabled && !config.restartSchedule) {
-    throw new Error("RAID_WINDOW_TICK is on but RESTART_SCHEDULE is off — the flip only takes effect at a restart, so nothing would ever apply it.");
-  }
-  // ⚠️ Fatal, unlike OPS_CHANNEL_ID below: the ops alert has a real degrade (an
-  // error-level log line, same as WAR_LOG_CHANNEL_ID unset), but the advance/open/
-  // close notices are the player-facing point of this feature — with no channel to
-  // post them to, this is misconfigured, not merely degraded. It also closes a
-  // write-order hazard: gating the tick on `serverEventsPoster` being present instead
-  // would either skip the tick silently (so a refused flip raises no alert either,
-  // since that check also guards the ops path) or, if the gate were dropped, let a
-  // no-op "post" return successfully and have postOnce's post-first-row-second
-  // order write an announcements row claiming the message went out when it did not.
-  if (config.raidWindow.enabled && !config.serverEventsChannelId) {
-    throw new Error("RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
   }
   // ⚠️ Same failure shape: the Sunday vehicle-wipe notice is the only warning a
   // player gets before their vehicle is cleared, so with no channel to post it

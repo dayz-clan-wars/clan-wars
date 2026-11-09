@@ -125,7 +125,7 @@ describe("Discord parity with the site", () => {
       "makeRoster", "notificationsFor", "boosterKit", "award", "awards",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
       "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
-      "baseDamageWindow", "restartsScheduled",
+      "restartsScheduled",
       // markAllNoticesRead/markNoticeRead ARE writes, but they write read-state
       // (a viewer's own watermark/read rows), not clan state, and have no
       // Discord command — putting them here (rather than a phantom COMMANDS
