@@ -47,7 +47,6 @@ export const ICON = {
   bounty: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   /** Same chip and same foot as `base` — an abandoned pole is still a pole. */
   publicBase: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
-  travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   pin: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   /** World layers: a smaller chip, because a town's loot buildings sit 20 m apart. */
   world: { size: [22, 22], anchor: [11, 11], tooltipAnchor: [14, 0] },
@@ -145,18 +144,6 @@ export function publicBaseIcon(p: Palette): string {
 }
 
 /**
- * A travel point: the glyph in a chip. Drawn only when zoomed in
- * (TRAVEL_MIN_ZOOM in map-draw.ts), so there is no zoomed-out form.
- *
- * The glyph is a bolt — the points are fast travel, and every point is a shed.
- */
-export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
-
-export function travelIcon(p: Palette): string {
-  return chip(p, p.olive, BOLT.replaceAll("{a}", p.olive));
-}
-
-/**
  * The world layers' glyphs, one per group (map-copy.ts WORLD_GROUPS); `{a}` is the
  * layer's accent. The group says what KIND of thing it is, the accent which one.
  */
@@ -222,7 +209,6 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "bounties": return `${open(` stroke="${p.rust2}"`)}<circle cx="14" cy="14" r="7"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7"/></svg>`;
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
-    case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;
     case "places": return `${open(` stroke="${p.ink}"`)}<path d="M3 8h16l6 6-6 6H3z" fill="${p.frame}"/><path d="M7 14h9"/></svg>`;
     default:
       // A world layer: its map glyph, bare.

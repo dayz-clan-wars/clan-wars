@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, declarations, poles, events, admFiles, ceremonies, zoneIncidents, bans, type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS, HUB_POSITION, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
 import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/store";
 
@@ -71,12 +71,6 @@ describe("declaration store", () => {
   it("refuses a pole within 200 m of another declaration", async () => {
     await solo(5000, 5000, "A");
     expect(await solo(5150, 5000, "B")).toEqual({ ok: false, reason: "too-close" });
-  });
-
-  it("⚠️ refuses a pole within 200 m of the Hub even with no declarations", async () => {
-    // The Hub sits in the map corner, so the edge buffer refuses it first;
-    // spacing.test.ts still covers the Hub's own 200 m check.
-    expect(await solo(HUB_POSITION.x + 10, HUB_POSITION.z)).toEqual({ ok: false, reason: "near-edge" });
   });
 
   it("refuses a second base for the same owner", async () => {

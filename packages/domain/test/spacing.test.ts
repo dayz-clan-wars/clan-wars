@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distance2d, tooClose, nearMapEdge, HUB_POSITION, MIN_BASE_SPACING_M, MAP_EDGE_BUFFER_M, WORLD_SIZE_M } from "../src/index.js";
+import { distance2d, tooClose, nearMapEdge, MIN_BASE_SPACING_M, MAP_EDGE_BUFFER_M, WORLD_SIZE_M } from "../src/index.js";
 
 describe("distance2d", () => {
   it("is planar on x and z, ignoring altitude", () => {
@@ -20,11 +20,6 @@ describe("tooClose", () => {
 
   it("accepts exactly 200 m — the rule is strictly less than", () => {
     expect(tooClose(far, [{ x: 5200, z: 5000 }])).toBeNull();
-  });
-
-  it("⚠️ treats the Fast Travel Hub as a declaration that always exists", () => {
-    const nearHub = { x: HUB_POSITION.x + 50, z: HUB_POSITION.z };
-    expect(tooClose(nearHub, [])).toEqual({ x: HUB_POSITION.x, z: HUB_POSITION.z });
   });
 
   it("uses MIN_BASE_SPACING_M by default", () => {

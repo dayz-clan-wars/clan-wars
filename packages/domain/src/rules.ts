@@ -72,19 +72,19 @@ export const MAP_EDGE_BUFFER_M = 1000;
  */
 export const PUBLIC_BASE_DESPAWN_MS = 7 * DAY;
 /**
- * The Fast Travel Hub's arrival point (fast-travel-points.json, `hub`). The
- * 200 m rule treats it as a declaration that always exists and is never
- * published, so no base can sit inside the one place every traveller lands.
+ * Where the Fast Travel Hub floated, on Chernarus and then Nasdara. History
+ * only: the Hub is gone, and nothing about bases looks at this any more. It
+ * stays for `atHub` (hub.ts), so `rebuild:kills` reproduces old `kills.at_hub` flags.
  */
 export const HUB_POSITION = { x: 100, z: 93 } as const;
 
 /**
- * The Hub's no-combat zone (spec 2026-09-22-hub-combat §2.1): a CYLINDER, not a
+ * The Hub's old no-combat zone, history only (spec 2026-09-22-hub-combat §2.1): a CYLINDER, not a
  * circle. The Hub floats — floor 997.5 m, doors 998.6 m, every door within 22 m
  * of HUB_POSITION — and the ground directly beneath it is ordinary map where a
  * fight is legal.
- * ⚠️ The floor is what makes that so. Drop it and every fight on the hill below
- * the Hub is a one-hour ban.
+ * ⚠️ The floor is what makes that so. Drop it and `rebuild:kills` would discredit
+ * old kills on the hill below the Hub.
  */
 export const HUB_ZONE_RADIUS_M = 100;
 export const HUB_ZONE_MIN_ALTITUDE_M = 900;
@@ -98,24 +98,6 @@ export const HUB_ZONE_MIN_ALTITUDE_M = 900;
  * rebuild, silently.
  */
 export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
-/** Every hit, kill or trap at the Hub. Measured from when the bot PROCESSES it — log delay must not eat the hour. */
-export const HUB_BAN_MS = 1 * HOUR;
-/** Self-defence: A may hit B back this long after B hit A. Per pair. */
-export const HUB_RETALIATION_WINDOW_MS = 2 * MIN;
-/**
- * ⚠️ Not about the sentence. An unseeded or rewound `hub-watch` cursor would
- * otherwise replay the whole log into bans — including the 2026-09-20 brawl,
- * from before the rule existed. Far longer than any log delay seen.
- */
-export const HUB_OFFENCE_MAX_AGE_MS = 24 * HOUR;
-/**
- * Placing one of these at the Hub is an offence. The first five were read off
- * `item.placed` payloads in factions_live on 2026-09-22.
- * ⚠️ `Plastic_Explosive` has NEVER been placed on this server — vanilla, and
- * included on that basis; confirm its classname the first time it appears.
- * A missing classname here is a trap the rule silently allows.
- */
-export const HUB_TRAP_CLASSES = ["BearTrap", "LandMineTrap", "TripwireTrap", "ImprovisedExplosive", "ClaymoreMine", "Plastic_Explosive"] as const;
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
@@ -221,11 +203,6 @@ export const WORLD_MAP = "nasdara";
  */
 export const VAULT_NAME_MAX = 40;
 export const VAULT_NOTE_MAX = 140;
-
-// Getting around
-/** Nasdara's sheds, every Land_Shed_* (FAST_TRAVEL_POINTS, travel.test.ts holds them equal). Clan poles are extra and never counted. */
-export const TRAVEL_POINTS = 2189;
-export const HUB_DESTINATIONS = 31;
 
 // Fair play
 export const COMBAT_LOG_MS = 10 * MIN;

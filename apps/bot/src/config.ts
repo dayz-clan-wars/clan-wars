@@ -211,12 +211,6 @@ export type BotConfig = {
   /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
   enforcementTick: boolean;
   /**
-   * No combat at the Fast Travel Hub. Writes `hub_combat` bans for `banTick`.
-   * ⚠️ BAN_DRY_RUN is false in production, so the first Hub ban is REAL the
-   * moment this is set — a deliberate act on a chosen day, never a deploy's.
-   */
-  hubBanTick: boolean;
-  /**
    * Link to play (spec 2026-11-06): ban gamertags that play unlinked.
    * `dry` runs the gate and posts "Would …" to ops without writing a row, so
    * the first pass can be watched without flipping the global `BAN_DRY_RUN`
@@ -540,7 +534,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
-    hubBanTick: ["1", "true"].includes((env.HUB_BAN_TICK ?? "").toLowerCase()),
     linkToPlay: linkToPlayMode(env.LINK_TO_PLAY),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
@@ -562,14 +555,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
   }
 
-  // ⚠️ hubTick only ever writes `bans` rows — banTick is what applies them
-  // to Nitrado. Without enforcementTick on too, rows would pile up and never
-  // be applied: a silent success from the operator's point of view.
-  if (config.hubBanTick && !config.enforcementTick) {
-    throw new Error("HUB_BAN_TICK is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
-  }
-
-  // ⚠️ Same shape as HUB_BAN_TICK: linkGateTick writes rows only banTick applies.
+  // ⚠️ linkGateTick only ever writes `bans` rows — banTick is what applies them
+  // to Nitrado, so without enforcementTick on too, rows would pile up unapplied.
   // `dry` writes nothing, but it is refused too so that turning it to `on`
   // later cannot be the first moment the missing tick shows.
   if (config.linkToPlay !== "off" && !config.enforcementTick) {

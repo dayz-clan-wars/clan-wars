@@ -1,5 +1,7 @@
 # Nasdara fast travel and the Hub ban (2.4.0)
 
+> ⚠️ **Superseded.** Fast travel, the Hub and the Hub ban were removed again after v2.20.0; see `docs/deploy/2026-11-09-no-fast-travel.md`. Kept as history.
+
 Brings back what 2026-10-17 removed with the Nasdara swap: the worker's
 flagpole travel boxes, the site's travel layer, the Hub combat ban and the
 Hub's 200 m spacing. The mission side (sheds, hub, town doors) shipped in

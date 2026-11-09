@@ -21,18 +21,16 @@ const LABELS = [
   "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rebrand cooldown", "New flag: raise it within", "Old name / tag held after disband", "Base move: confirm window", "Vault code length",
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
-  "Fast travel points (sheds)", "Hub destinations",
   "Combat log rule", "Watchtower height", "Window to press charges on a closed zone incident",
-  "Hub: combat ban", "Hub: self-defence window", "Hub: no-combat radius",
   "Bounty: online time to serve (default)", "Bounty: longest an admin can set", "Bounty: closes regardless after",
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 70 rows the appendix holds, in order", () => {
+  it("has the 65 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {
-    expect(GUIDE_GROUPS).toEqual(["Getting in", "Founding", "Bases", "Raiding", "Defending", "The scoreboard", "Running a clan", "Discord", "The map", "Getting around", "Fair play"]);
+    expect(GUIDE_GROUPS).toEqual(["Getting in", "Founding", "Bases", "Raiding", "Defending", "The scoreboard", "Running a clan", "Discord", "The map", "Fair play"]);
     for (const r of GUIDE_NUMBERS) expect(GUIDE_GROUPS).toContain(r.group);
   });
   it("every row's key resolves to its own value", () => {
@@ -53,10 +51,6 @@ describe("GUIDE_NUMBERS (the appendix)", () => {
     expect(v["Weekly weapon kit lasts (days)"]).toBe("7");
     expect(v["No-confidence vote: threshold"]).toBe("⅔ of all full members");
     expect(v["Watchtower height"]).toBe("2 (1 on a structure)");
-    expect(v["Hub: combat ban"]).toBe("1 h");
-    expect(v["Hub: self-defence window"]).toBe("2 min");
-    expect(v["Hub: no-combat radius"]).toBe("100 m");
-    expect(v["Fast travel points (sheds)"]).toBe("2189");
   });
 });
 
