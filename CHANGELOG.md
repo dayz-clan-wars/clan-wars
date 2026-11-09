@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-11-09
+
 ### Changed
 
 - Raiding is on around the clock. Bases can be damaged at any time, not just on weekends. The raid window countdown is gone from the site, and the guide is updated.
