@@ -11,9 +11,9 @@ const pin = (over: Partial<MapState["pins"][number]> = {}): MapState["pins"][num
 
 /**
  * ⚠️ EVERY forbidden field carries a distinctive value, on purpose. A
- * fixture that leaves `clanmates`, `base`, `you.fix` or `travelPoints` empty
+ * fixture that leaves `clanmates`, `base`, or `you.fix` empty
  * makes the "never renders" test below pass vacuously: a future field that
- * rendered a clanmate's position, the viewer's own base or the hub would sail
+ * rendered a clanmate's position or the viewer's own base would sail
  * through it. The strings and numbers here appear nowhere else in the file,
  * so any one of them reaching the card fails the test by name.
  */
@@ -26,14 +26,12 @@ const mapFixture = (over: Partial<MapState> = {}): MapState => ({
   publicBases: [{ x: 3331, z: 3332 }],
   pins: [pin()],
   bounties: [{ gamertag: "Fugitive", reason: "smoked the whole clan", fix: { x: 9991, z: 9992, at: new Date("2026-09-12T09:15:00Z") } }],
-  travelPoints: [{ x: 2221, z: 2222 }],
-  hub: { x: 1111, z: 1112 },
   layers: { base: true, clanmates: true, intruders: true, pins: true },
   ...over,
 });
 
 /** Every value in `mapFixture` that no reply may ever carry. */
-const FORBIDDEN = ["Rat", "wolf", "Bex", "mate-1", "7771", "7772", "6661", "6662", "5551", "5552", "4441", "4442", "3331", "3332", "2221", "2222", "1111", "1112", "Fugitive", "smoked the whole clan", "9991", "9992"];
+const FORBIDDEN = ["Rat", "wolf", "Bex", "mate-1", "7771", "7772", "6661", "6662", "5551", "5552", "4441", "4442", "3331", "3332", "Fugitive", "smoked the whole clan", "9991", "9992"];
 
 describe("/map pins", () => {
   it("lists the clan's own pins with their ids", async () => {

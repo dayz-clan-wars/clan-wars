@@ -35,8 +35,8 @@ import {
 } from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
 import {
-  TRAVEL_PANE, WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
-  drawWorld, worldView, drawReticle, drawRuler, setRulerMode, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
+  drawWorld, worldView, drawReticle, drawRuler, setRulerMode, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -68,14 +68,14 @@ const BLANK_TILE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAA
 const LAYER_STORAGE_KEY = "clan-wars.map.layers";
 /** The world this map draws; the place names are keyed on it. */
 const MAP = WORLD_MAP;
-/** Place names sit over the travel points (350) and under every player marker (overlay 400, markers 600). */
+/** Place names sit over the world markers (340) and under every player marker (overlay 400, markers 600). */
 const PLACE_PANE = "places";
 /** Ages are recomputed far more often than positions are fetched, so a label never goes stale. */
 const AGE_TICK_MS = 30_000;
 
 type LayerKey = keyof typeof LAYER_LABELS;
-/** The six every linked viewer has; the other four are gated on `layers.*`. */
-const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "places", "terrain", "bounties"];
+/** The five every linked viewer has; the other four are gated on `layers.*`. */
+const ALWAYS: LayerKey[] = ["you", "publicBases", "places", "terrain", "bounties"];
 const ALL_KEYS = Object.keys(LAYER_LABELS) as LayerKey[];
 const ALL_ON = Object.fromEntries(ALL_KEYS.map((k) => [k, true])) as Record<LayerKey, boolean>;
 
@@ -567,7 +567,6 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
       bounties: () => drawBounties(ctx("bounties")),
       publicBases: () => drawPublicBases(ctx("publicBases")),
       pins: () => drawPins(ctx("pins")),
-      travel: () => drawTravel(ctx("travel"), travelView(m)),
     };
     for (const key of changed) draws[key]();
     // The grid never changes, so it is drawn once — redrawing 26 polylines
@@ -640,14 +639,10 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
         const world = Lm.latLngBounds([ll(0, 0), ll(size, size)]);
         m.setMaxBounds(world);
 
-        // Under the overlay pane (400) that holds the dots, over the tiles
-        // (200): 2,189 travel points must never cover the one dot someone opened
-        // the map to find.
-        const pane = m.createPane(TRAVEL_PANE);
-        if (pane) pane.style.zIndex = "350";
         const placePane = m.createPane(PLACE_PANE);
         if (placePane) placePane.style.zIndex = "360";
-        // Under the travel points: a world marker is background, never over a shed or a player.
+        // Under the overlay pane (400) that holds the dots, over the tiles (200),
+        // and under the place names: a world marker is background, never over a player.
         const worldPane = m.createPane(WORLD_PANE);
         if (worldPane) worldPane.style.zIndex = "340";
 
@@ -681,16 +676,6 @@ export default function MapView({ layers, notice, guide, next, timers }: { layer
         };
         m.on("zoomend", drawPlaces);
 
-        // Travel points follow the view: none below TRAVEL_MIN_ZOOM, and above
-        // it only the sheds near the screen, redrawn on every pan and zoom
-        // (moveend fires for both). The poll's redraw draws the same set.
-        const redrawTravel = () => {
-          const g = groups.current.travel, d = dataRef.current;
-          if (!g || !d) return;
-          g.clearLayers();
-          drawTravel({ L: Lm, group: g, pt: ptFor(Lm, d.world.size), data: d, p: palette() }, travelView(m));
-        };
-        m.on("moveend", redrawTravel);
         // World markers follow the view the same way (worldView): none of the dense layers zoomed out.
         m.on("moveend", redrawWorld);
 

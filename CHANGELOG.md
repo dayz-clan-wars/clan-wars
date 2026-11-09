@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- Fast travel and the Hub. Sheds no longer take you anywhere, the Hub is gone along with its no-combat ban, and the map's travel layer is removed. The guide's Getting around chapter is gone too.
+
 ## [2.20.0] - 2026-11-08
 
 ### Added

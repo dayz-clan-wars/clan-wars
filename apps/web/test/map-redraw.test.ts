@@ -14,8 +14,6 @@ const WIRE: WireState = {
   publicBases: [{ x: 3000, z: 3000 }],
   pins: [{ id: 7, x: 4000, z: 4000, icon: "loot", note: "crate", by: "Bob", at: "2026-09-24T10:00:00Z", expiresAt: "2026-10-01T10:00:00Z" }],
   bounties: [],
-  travelPoints: [{ x: 5000, z: 5000 }],
-  hub: { x: 6000, z: 6000 },
   layers: { base: false, clanmates: true, intruders: false, pins: true },
 };
 const first = layerSignatures(parseState(WIRE), false);
@@ -35,11 +33,6 @@ describe("changedLayers", () => {
     const changed = changedLayers(first, layerSignatures(parseState(moved), false));
     expect(changed).toEqual(["clanmates"]);
     expect(reopenAfter(markerKey.pin(7), changed)).toBeNull();
-  });
-
-  it("never rebuilds the 209 travel points once drawn", () => {
-    const again = layerSignatures(parseState({ ...WIRE, clanmates: [] }), false);
-    expect(changedLayers(first, again)).not.toContain("travel");
   });
 
   it("redraws the 'you' group when the hint's ring comes or goes", () => {

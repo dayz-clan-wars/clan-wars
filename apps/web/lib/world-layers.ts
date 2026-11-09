@@ -22,7 +22,7 @@ export const WORLD_STORAGE_KEY = "clan-wars.map.world";
 
 /**
  * Markers below this zoom are not drawn (bunkers and contaminated circles excepted). 4 is
- * where "Center on me" lands (RECENTRE_ZOOM) and where the travel points appear, so a
+ * where "Center on me" lands (RECENTRE_ZOOM), so a
  * player who centres on themselves sees the vehicle and crash-site spawns around them.
  * Every event and spawn layer on at once is ~140 markers in a phone's padded view at 4.
  */

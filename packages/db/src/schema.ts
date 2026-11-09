@@ -1489,6 +1489,8 @@ export const supplyUploads = pgTable("supply_uploads", {
  * clan's declared pole as a travel point on top of the 209 fixed ones. One
  * row per server; same hash-then-baseline contract, same hazards — see
  * `supply_uploads` above and apps/ingest-worker/src/projection-upload.ts.
+ * ⚠️ History: fast travel is gone and nothing writes this table any more. The
+ * rows stay; drop it in a migration only on purpose.
  */
 export const travelUploads = pgTable("travel_uploads", {
   serverId: integer("server_id").primaryKey().references(() => servers.id),

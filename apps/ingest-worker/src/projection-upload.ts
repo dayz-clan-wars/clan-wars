@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
-import { supplyUploads, travelUploads, boosterKitUploads, awardUploads } from "@factions/db";
+import { supplyUploads, boosterKitUploads, awardUploads } from "@factions/db";
 import { eq } from "drizzle-orm";
 
 /** What the game server reports about a file it holds. */
@@ -23,9 +23,8 @@ type UploadRow = { contentHash: string; uploadedAt: Date; remoteSize: number | n
 
 /**
  * Where one projected file remembers what it last sent: `supply_uploads`
- * for the kit, `travel_uploads` for the fast-travel config, and
- * `booster_kit_uploads` for the booster kits, and `award_uploads` for the
- * event awards. Same columns, one table each, so the four files' hashes and
+ * for the kit, `booster_kit_uploads` for the booster kits, and
+ * `award_uploads` for the event awards. Same columns, one table each, so the three files' hashes and
  * baselines cannot cross.
  */
 export type UploadStore = {
@@ -34,7 +33,7 @@ export type UploadStore = {
   observe(db: Database, serverId: number, found: RemoteFileStat): Promise<void>;
 };
 
-const storeFor = (table: typeof supplyUploads | typeof travelUploads | typeof boosterKitUploads | typeof awardUploads): UploadStore => ({
+const storeFor = (table: typeof supplyUploads | typeof boosterKitUploads | typeof awardUploads): UploadStore => ({
   async read(db, serverId) {
     const [row] = await db.select().from(table).where(eq(table.serverId, serverId));
     return row;
@@ -47,7 +46,6 @@ const storeFor = (table: typeof supplyUploads | typeof travelUploads | typeof bo
   },
 });
 export const SUPPLY_STORE: UploadStore = storeFor(supplyUploads);
-export const TRAVEL_STORE: UploadStore = storeFor(travelUploads);
 export const BOOSTER_KIT_STORE: UploadStore = storeFor(boosterKitUploads);
 export const AWARD_STORE: UploadStore = storeFor(awardUploads);
 

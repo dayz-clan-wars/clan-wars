@@ -20,7 +20,7 @@ const PREFER: BanActiveStatus[] = ["applied", "lift_pending", "pending"];
  * ⚠️ This tick NEVER calls Nitrado. It writes `unlinked` rows and lift
  * requests; `banTick` is the only thing that talks to the ban list, and its
  * reference counting (`stillBanned`) is what stops a lift freeing a gamertag
- * that also has a zone, conduct or Hub ban.
+ * that also has a zone, conduct or (old) Hub ban.
  *
  * ⚠️ Only `reason = 'unlinked'` rows are read as this gate's history or
  * written. Every other reason is invisible here, by query.

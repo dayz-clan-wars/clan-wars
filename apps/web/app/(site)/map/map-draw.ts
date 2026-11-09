@@ -9,7 +9,7 @@ import { markerKey } from "@/lib/map-roster";
 import { popupOptions } from "@/lib/map-motion";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
-  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, worldAccent, worldIcon, youIcon,
+  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, worldAccent, worldIcon, youIcon,
 } from "@/lib/map-icons";
 
 /**
@@ -34,8 +34,6 @@ export type WireState = {
   publicBases: { x: number; z: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: string; expiresAt: string }[];
   bounties: { gamertag: string; reason: string; fix: WireFix }[];
-  travelPoints: readonly { x: number; z: number }[];
-  hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
 };
 
@@ -102,18 +100,6 @@ export function palette(): Palette {
   return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust2: COLOURS.rust2(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2(), military: COLOURS.military() };
 }
 
-/** Leaflet's own pane sits at 400; travel points go under everything else at 350. */
-export const TRAVEL_PANE = "travel";
-/**
- * Travel points are drawn from this zoom up, and only those in view. Below it
- * the layer is empty: 2,189 sheds on a phone's whole-map view were a marker
- * per few pixels and the slowest thing on the page. 4 is past every screen's
- * zoom floor (a 1920 px desktop's is 3), so "zoomed in" means it everywhere.
- */
-export const TRAVEL_MIN_ZOOM = 4;
-/** How far past the visible edge to draw, as a fraction of the view, so a short pan shows sheds before the redraw lands. */
-export const TRAVEL_VIEW_PAD = 0.25;
-
 /** A marker whose chip is one of the strings in map-icons.ts. Never a white box: `.cw-mk` in globals.css. */
 function chipIcon(L: typeof import("leaflet"), html: string, box: { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }, className: string): L.DivIcon {
   return L.divIcon({ className: `cw-mk ${className}`, html, iconSize: [...box.size], iconAnchor: [...box.anchor], tooltipAnchor: [...box.tooltipAnchor] });
@@ -125,7 +111,7 @@ function chipIcon(L: typeof import("leaflet"), html: string, box: { size: readon
  * ⚠️ This registry is why the age tick does NOT rebuild the layers. Clearing
  * and redrawing every group each tick tore down whatever was open: a player
  * halfway through reading a pin note lost the note and its Delete button
- * within 30 seconds, and 2,189 travel markers were rebuilt for nothing. So the
+ * within 30 seconds. So the
  * structural draw happens on new DATA only, and a tick calls `refreshAges`,
  * which rewrites content in place — Leaflet's `setTooltipContent` and
  * `setPopupContent` update an OPEN tooltip or popup without closing it.
@@ -191,7 +177,7 @@ function applyStep(marker: L.Marker, step: AgeStep): void {
     // Not on the map yet — the first draw runs before the group is added, and
     // a switched-off layer has no elements at all. Leaflet builds the element
     // from the icon's className when it does add the marker, so the class
-    // goes there. The icon is this marker's own, never the shared travel one.
+    // goes there. The icon is this marker's own, never a shared one.
     const icon = marker.options.icon;
     if (icon) {
       const cls = (icon.options.className ?? "").replace(/\s*\bcw-stale\b/gu, "");
@@ -421,27 +407,6 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
 }
 
 /**
- * The travel points inside `view`, or none when `view` is null (zoomed out).
- * map-view.tsx passes the padded bounds and redraws on every moveend, so the
- * group only ever holds the sheds near the screen.
- */
-export function drawTravel({ L, group, pt, data, p }: Pick<Ctx, "L" | "group" | "pt" | "data" | "p">, view: L.LatLngBounds | null): void {
-  if (view === null) return;
-  const icon = chipIcon(L, travelIcon(p), ICON.travel, "cw-mk-travel");
-  // The Hub itself is not drawn: it is one fixed, well-known building, and a
-  // marker with a name tag at every zoom only covered the south-west corner.
-  for (const t of data.travelPoints) {
-    const at = pt(t.x, t.z);
-    if (view.contains(at)) L.marker(at, { pane: TRAVEL_PANE, icon, keyboard: false, interactive: false }).addTo(group);
-  }
-}
-
-/** The bounds to draw travel points in, or null below TRAVEL_MIN_ZOOM. */
-export function travelView(m: L.Map): L.LatLngBounds | null {
-  return m.getZoom() >= TRAVEL_MIN_ZOOM ? m.getBounds().pad(TRAVEL_VIEW_PAD) : null;
-}
-
-/**
  * A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in.
  * ⚠️ Horizontals run at z = size − k·1000, not k·1000: the GPS counts rows down
  * from the north edge, and a grid anchored at the south edge would be drawn
@@ -455,11 +420,10 @@ export function drawGrid(L: typeof import("leaflet"), group: L.LayerGroup, pt: (
   }
 }
 
-/** The world layers' pane: under the travel points (350), the place names (360) and every player marker. */
+/** The world layers' pane: under the place names (360) and every player marker. */
 export const WORLD_PANE = "world";
 /**
- * How far past the visible edge world markers are drawn. Smaller than the travel pad:
- * the loot layers are the densest thing on the map, and every 10% of pad on each side
+ * How far past the visible edge world markers are drawn. Kept small: the loot layers are the densest thing on the map, and every 10% of pad on each side
  * is ~44% more area to fill with DOM markers.
  */
 export const WORLD_VIEW_PAD = 0.1;

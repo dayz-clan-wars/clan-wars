@@ -12,7 +12,6 @@ export * from "./hub";
 export * from "./raid-value";
 export * from "./scoring";
 export * from "./scoring-week";
-export * from "./travel";
 export * from "./guide-numbers";
 export * from "./death-verdict";
 export * from "./hit-bursts";

@@ -1,5 +1,7 @@
 # No combat at the Hub — deploy
 
+> ⚠️ **Superseded.** Fast travel, the Hub and the Hub ban were removed again after v2.20.0; see `docs/deploy/2026-11-09-no-fast-travel.md`. Kept as history.
+
 A hit, a kill, or a trap placed at the Fast Travel Hub is an automatic one-hour ban,
 and every kill made there — past and future — counts for nothing. Spec:
 `docs/superpowers/specs/2026-09-22-hub-combat-design.md`. Zone and offence rule:

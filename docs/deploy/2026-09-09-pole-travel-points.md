@@ -1,5 +1,7 @@
 # Deploy: an active clan's flagpole is a fast-travel point (2026-09-09)
 
+> ⚠️ **Superseded.** Fast travel, the Hub and the Hub ban were removed again after v2.20.0; see `docs/deploy/2026-11-09-no-fast-travel.md`. Kept as history.
+
 The ingest worker now projects a second file onto the game server, next to
 `faction-supplies.json`: **`pra-teleport-hub.json`**, the fast-travel mod's config.
 It is the vendored template for the server's map (`apps/ingest-worker/assets/travel/<mission>.json`,

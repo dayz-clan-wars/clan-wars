@@ -59,10 +59,9 @@ describe("claim path writes feed events", () => {
 
   const events = () => db.select().from(factionEvents).orderBy(asc(factionEvents.id));
 
-  // Well clear of HUB_POSITION (100, 93): declareTx checks the Hub
-  // unconditionally (spec §4.10), so a pole near the origin would fail every
-  // reserve with "too-close" before these tests reach the scarcity rule they
-  // mean to exercise.
+  // Mid-map on purpose: a pole near the origin would be refused by declareTx's
+  // placement checks before these tests reach the scarcity rule they mean to
+  // exercise.
   /** ceremonyId comes from the fixture; everything else is fixed here. */
   const args = (ceremonyId: number, over: Partial<{ name: string; tag: string; texture: string; poleKey: string }> = {}) => ({
     ceremonyId, serverId,

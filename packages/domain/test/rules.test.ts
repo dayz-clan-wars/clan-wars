@@ -53,8 +53,6 @@ describe("rules", () => {
     expect(R.ALPHAS_PER_WEEK).toBe(3);
     expect(R.KD_MIN_KILLS).toBe(10);
     expect(R.VAULT_CODE_DIGITS).toEqual({ min: 4, max: 6 });
-    expect(R.TRAVEL_POINTS).toBe(2189);
-    expect(R.HUB_DESTINATIONS).toBe(31);
     expect(R.WATCHTOWER_MAX_HEIGHT).toEqual({ grounded: 2, onStructure: 1 });
     expect(R.VOTE_THRESHOLD).toEqual({ num: 2, den: 3 });
     expect(R.HUB_POSITION).toEqual({ x: 100, z: 93 });
