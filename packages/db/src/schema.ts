@@ -266,8 +266,13 @@ export const identityLinks = pgTable("identity_links", {
 
 /**
  * Every identity link that ended, by any path (unlink, guild removal, a
- * pending-challenge cleanup, a hand delete). Link-to-play bans a lost link at
- * once, and the ban gate needs to know a link existed and went away.
+ * pending-challenge cleanup, a hand delete). Link-to-play read it to ban a lost
+ * link at once.
+ *
+ * ⚠️ History: link-to-play is gone (unreleased after v2.21.0) and nothing reads
+ * this table any more. The trigger still writes it on every link delete; it and
+ * the table stay, because dropping them would need a migration. Drop both in one
+ * on purpose if ever wanted.
  *
  * ⚠️ Written ONLY by the AFTER DELETE trigger `identity_link_ends_record` on
  * `identity_links` (migration 0074), never by application code: three code
@@ -2232,8 +2237,9 @@ export const bans = pgTable("bans", {
   status: text("status").$type<BanStatus>().notNull().default("pending"),
   /**
    * ⚠️ Defaults to `'zone'` so the rows that existed before the PC gate keep
-   * their meaning. `unlinked` rows (link-to-play) are lifted by starting a
-   * link; `unlinked_pc` was the retired PC gate's and is never lifted that way.
+   * their meaning. `unlinked` rows were link-to-play's (removed after v2.21.0;
+   * every open one was lifted) and `unlinked_pc` the retired PC gate's. Both stay
+   * valid reasons so old rows still read and render.
    */
   reason: text("reason").$type<BanReason>().notNull().default("zone"),
   /**

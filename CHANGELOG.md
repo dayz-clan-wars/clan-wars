@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- The one-hour link requirement. Unlinked players are no longer banned, and anyone banned for it has been unbanned. Linking is still how you join a clan, declare a base and use the site.
 - King of the Hill. Events, `/koth` and `/kothvote` are gone. Past results and any prizes already won stay.
 
 ## [2.21.0] - 2026-11-09

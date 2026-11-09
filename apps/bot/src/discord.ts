@@ -4,7 +4,7 @@ import {
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS, LINK_SWEEP_MAX_PER_PASS, LINK_SWEEP_INTERVAL_MS } from "@factions/domain";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore, type ReferralRefusal } from "@factions/verification";
 import { REFERRAL_COPY } from "@factions/copy";
@@ -24,7 +24,6 @@ import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
-import { linkGateTick, linkGateOpsLines } from "./link-gate-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
@@ -72,7 +71,6 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { wellAwardTick } from "./well-award-tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
-import { sweepMissedRemovals } from "./guild-sweep.js";
 import { makeRoster } from "@factions/roster";
 import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
 import { acquireInstanceLock } from "./instance-lock.js";
@@ -931,49 +929,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   // queues above, "the row currently reported blocked" is per server, not a
   // single scalar.
   const lastReportedBanAnnounceBlockedAt = new Map<number, number | null>();
-  // `LINK_TO_PLAY=dry` writes nothing, so every pass finds the same gamertags;
-  // this keeps ops to one line per server and dayz id per process.
-  const linkGateDryReported = new Set<string>();
-  // Link to play (spec 2026-11-06 §3), run per server just BEFORE banTick:
-  // it writes the rows banTick applies, so afterwards would delay every new
-  // ban a whole cycle. ⚠️ Its own try/catch: a failure here must never stop the ban tick for
-  // this server or any other.
-  const runLinkGate = async (serverId: number, now: Date): Promise<void> => {
-    try {
-      const dry = cfg.linkToPlay === "dry";
-      const r = await linkGateTick(db, { serverId, now, write: !dry });
-      // Same null-poster fallback the old PC gate used: with no OPS_CHANNEL_ID
-      // a ban still happens and must show somewhere.
-      const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-      for (const line of linkGateOpsLines(r, dry)) {
-        // ⚠️ A dry pass writes nothing, so the same gamertag comes back every
-        // five minutes; report each one once per process.
-        if (dry) {
-          const key = `${serverId}:${line.dayzId}`;
-          if (linkGateDryReported.has(key)) continue;
-          linkGateDryReported.add(key);
-        }
-        // ⚠️ Each post isolated: the rows are already committed and banTick
-        // applies them this pass, so one failed post must not swallow the
-        // rest. Nothing retries them, so fall back to the log.
-        try {
-          await ops(line.content);
-        } catch (err) {
-          console.error(`link gate: ops post failed, the change still stands: ${line.content}`, err);
-        }
-      }
-    } catch (err) {
-      console.error(`link gate tick failed for server ${serverId}`, err);
-    }
-  };
-
   // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
   // tick — see the throttle beside expirePendingMembers below.
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
-  // Link sweep throttle and capped-episode flag (alert once per episode).
-  let lastSweepAt = 0;
-  let sweepCapped = false;
 
   // The leaderboards channel's ten standing messages, on the same clock as
   // the crowns below — both read the same ten boards.
@@ -1155,40 +1114,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       await runStructure("tick");
     } catch (err) {
       console.error("structure tick failed", err);
-    }
-
-    // ⚠️ Spec §9 (reverses ruling 10): links whose Discord user left while the
-    // bot was down. `membersFetched` is load-bearing — a cold member cache
-    // reads as "everyone left" — and each candidate is confirmed by a REST
-    // member fetch before removal. Hourly (plus once right after the first full
-    // fetch, since lastSweepAt starts at 0) so a bad read cannot repeat every
-    // tick. Its own try/catch. ⚠️ Only with LINK_TO_PLAY=on: its removals are
-    // real and irreversible, so `dry` (which must touch nothing) leaves it off.
-    if (cfg.linkToPlay === "on" && membersFetched && Date.now() - lastSweepAt >= LINK_SWEEP_INTERVAL_MS) {
-      try {
-        const sw = await sweepMissedRemovals(db, {
-          ready: membersFetched,
-          isMember: (id) => guildGateway.isMember(id),
-          memberExists: (id) => guildGateway.fetchMemberExists(id),
-          now: new Date(),
-          max: LINK_SWEEP_MAX_PER_PASS,
-        });
-        lastSweepAt = Date.now();
-        const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        if (sw.removed.length > 0) {
-          await ops(`Link sweep: removed ${sw.removed.length} linked user(s) who had left the Discord: ${sw.removed.map((r) => `${r.gamertag} (<@${r.discordId}>)`).join(", ")}`);
-        }
-        if (sw.capped && !sweepCapped) {
-          // Error level on purpose, once per episode: this many missing at
-          // once is more likely a bad member read than a real exodus.
-          const msg = `Link sweep halted: ${sw.missing} linked users look absent from the Discord, over the cap of ${LINK_SWEEP_MAX_PER_PASS}. A bad member read is the likely cause; nobody was removed.`;
-          console.error(msg);
-          await ops(msg);
-        }
-        sweepCapped = sw.capped;
-      } catch (err) {
-        console.error("link sweep failed", err);
-      }
     }
 
     // ⚠️ Its own try/catch, right after structure and on its own throttle: the
@@ -1538,8 +1463,6 @@ export async function start(cfg: BotConfig): Promise<void> {
           const banNow = new Date();
           const since = new Date(banNow.getTime() - BAN_APPLY_LOOKBACK_MS);
           for (const s of banServers) {
-            // ⚠️ Before banTick, see runLinkGate.
-            if (cfg.linkToPlay !== "off") await runLinkGate(s.id, banNow);
 
             try {
               const b = await banTick(db, nitradoFor(s.serviceId!), { now: banNow, dryRun: cfg.banDryRun, since, serverId: s.id });
@@ -1948,9 +1871,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.log("public ban announcements on: #bans");
     }
 
-    if (cfg.linkToPlay === "off") console.warn("LINK_TO_PLAY is off: unlinked gamertags are not being banned.");
-    else if (cfg.linkToPlay === "dry") console.log("LINK_TO_PLAY dry: the link gate posts what it would do to ops and writes nothing.");
-    else console.log("LINK_TO_PLAY on: unlinked gamertags are banned after their grace hour (one lift a day on starting to link).");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

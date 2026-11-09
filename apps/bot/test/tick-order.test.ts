@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GATE_COPY } from "@factions/copy";
 
 const src = readFileSync(join(import.meta.dirname, "..", "src", "discord.ts"), "utf8");
 
@@ -48,21 +47,9 @@ describe("enforcement tick wiring (task 10)", () => {
     expect(src).toMatch(/if \(cfg\.enforcementTick\) \{[\s\S]{0,600}?await banTick\(db, nitradoFor\(s\.serviceId!\), \{[\s\S]{0,200}?serverId: s\.id/u);
   });
 
-  it("runs the link gate per server before banTick, inside the enforcement block", () => {
-    expect(src).toMatch(/for \(const s of banServers\) \{[\s\S]{0,400}?await runLinkGate\(s\.id, banNow\);[\s\S]{0,200}?await banTick\(/u);
-  });
-
-  it("⚠️ the link sweep runs only with LINK_TO_PLAY=on and confirms by REST before removing", () => {
-    expect(src).toMatch(/if \(cfg\.linkToPlay === "on" && membersFetched && [\s\S]{0,80}?LINK_SWEEP_INTERVAL_MS\) \{\s*try \{\s*const sw = await sweepMissedRemovals\(/u);
-    expect(src).toMatch(/memberExists: \(id\) => guildGateway\.fetchMemberExists\(id\)/u);
-  });
-
-  it("⚠️ the link page's \"within 5 minutes\" is the ban block's interval", () => {
-    // GATE_COPY["will-lift"] names the number; the link gate and banTick run
-    // beside the reaper on REAPER_INTERVAL_MS. Change one, change both.
-    const m = /const REAPER_INTERVAL_MS = (\d+) \* 60_000;/u.exec(src);
-    expect(m).not.toBeNull();
-    expect(GATE_COPY["will-lift"]("")).toContain(`within ${m![1]} minutes`);
+  // Link to play is gone: no link gate before banTick, no hourly guild sweep.
+  it("runs no link gate and no guild sweep", () => {
+    expect(src).not.toMatch(/runLinkGate|sweepMissedRemovals|linkToPlay/u);
   });
 
   it("bounds banTick's since by BAN_APPLY_LOOKBACK_MS from now, not process start time", () => {

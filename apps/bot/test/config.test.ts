@@ -521,25 +521,10 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("LINK_TO_PLAY", () => {
-    const ON = { ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" };
-    it("unset is off", () => {
-      expect(loadConfig(OK).linkToPlay).toBe("off");
-    });
-    it("reads dry and on (trimmed, any case)", () => {
-      expect(loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "dry" }).linkToPlay).toBe("dry");
-      expect(loadConfig({ ...OK, ...ON, LINK_TO_PLAY: " ON " }).linkToPlay).toBe("on");
-    });
-    it("⚠️ an unknown value refuses to load rather than reading as off", () => {
-      expect(() => loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "bogus" })).toThrow(/LINK_TO_PLAY must be off, dry or on/u);
-      expect(() => loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "true" })).toThrow(/LINK_TO_PLAY must be off, dry or on/u);
-    });
-    it("⚠️ dry or on without ENFORCEMENT_TICK refuses to load", () => {
-      expect(() => loadConfig({ ...OK, LINK_TO_PLAY: "dry" })).toThrow(/LINK_TO_PLAY is dry but ENFORCEMENT_TICK is off/u);
-      expect(() => loadConfig({ ...OK, LINK_TO_PLAY: "on" })).toThrow(/LINK_TO_PLAY is on but ENFORCEMENT_TICK is off/u);
-    });
-    it("off without ENFORCEMENT_TICK loads", () => {
-      expect(loadConfig({ ...OK, LINK_TO_PLAY: "off" }).linkToPlay).toBe("off");
+  // Link to play is gone. A production .env that still sets it must load.
+  describe("retired LINK_TO_PLAY", () => {
+    it("is ignored, whatever its value", () => {
+      for (const v of ["off", "dry", "on", "bogus"]) expect(loadConfig({ ...OK, LINK_TO_PLAY: v })).not.toHaveProperty("linkToPlay");
     });
   });
 

@@ -206,13 +206,10 @@ describe("the guide without fast travel", () => {
   });
 });
 
-describe("link to play in the guide", () => {
-  it("states the grace and the lift from the rules, not typed numbers", () => {
+describe("linking in the guide", () => {
+  // Link to play is gone: the guide must not promise a lock-out.
+  it("no longer says an unlinked gamertag is locked out", () => {
     const raw = readFileSync(join(CONTENT_DIR, "02-getting-in.html"), "utf8");
-    expect(raw).toContain("{{LINK_TO_PLAY_GRACE_MS|hours}}");
-    expect(raw).toContain("{{LINK_TO_PLAY_LIFT_MS|hours}}");
-    const html = renderFragment(raw).html;
-    expect(html).toContain("1 hour of play to link");
-    expect(html).toContain("let back on for 1 hour");
+    expect(raw).not.toMatch(/LINK_TO_PLAY|locked out/u);
   });
 });

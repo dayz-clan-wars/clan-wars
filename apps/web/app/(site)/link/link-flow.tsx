@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LINK_EMOTES } from "@factions/domain";
 import type { IssueOutcome, LinkStatus, StartLinkOutcome } from "@factions/roster";
-import { ENDED_COPY, GATE_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, REFERRAL_COPY, formatRemaining } from "@/lib/link-copy";
+import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, REFERRAL_COPY, formatRemaining } from "@/lib/link-copy";
 import { readJson, resolveTyped, type Match } from "@/lib/link-claim";
 import { visiblePoll } from "@/lib/visible-poll";
 import { when } from "@/lib/format";
@@ -233,17 +233,6 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
           <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}<span className="lg:hidden"> left</span></span>
         </div>
         {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Note" neutral>{notice}</Refusal></div>}
-        {challenge.gate && (
-          <div className="px-4 pt-4 lg:px-5">
-            <Refusal label="Back on the server" neutral>
-              {GATE_COPY[challenge.gate.kind](
-                challenge.gate.kind === "lifted" ? when(new Date(challenge.gate.until))
-                  : challenge.gate.kind === "lift-used" ? when(new Date(challenge.gate.nextAt))
-                  : "",
-              )}
-            </Refusal>
-          </div>
-        )}
         {/* ⚠️ An ordered list, because the order IS the proof. */}
         <ol className="flex flex-col gap-2 p-4 lg:gap-2.5 lg:p-5">
           {challenge.steps.map((s, i) => (

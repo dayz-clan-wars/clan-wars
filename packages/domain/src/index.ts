@@ -28,4 +28,3 @@ export * from "./show";
 export * from "./live-feed";
 export * from "./firearms";
 export * from "./achievement-evidence";
-export * from "./link-gate";

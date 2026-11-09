@@ -199,14 +199,6 @@ export type BotConfig = {
   /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
   enforcementTick: boolean;
   /**
-   * Link to play (spec 2026-11-06): ban gamertags that play unlinked.
-   * `dry` runs the gate and posts "Would …" to ops without writing a row, so
-   * the first pass can be watched without flipping the global `BAN_DRY_RUN`
-   * (whose hazards are in CLAUDE.md). `on` writes `unlinked` ban rows.
-   * ⚠️ BAN_DRY_RUN is false in production, so `on` bans for real at once.
-   */
-  linkToPlay: "off" | "dry" | "on";
-  /**
    * The public #bans channel — enforced bans and unbans, announced. Undefined
    * means it is OFF: `ban_announcements` rows keep queuing (written whether or
    * not this is set) and nothing posts, same degrade-not-refuse shape as
@@ -214,17 +206,6 @@ export type BotConfig = {
    */
   bansChannelId?: string;
 };
-
-/**
- * ⚠️ Anything but off/dry/on refuses to load. A typo like `ON ` or `true`
- * falling back to off would leave the operator believing the gate runs.
- */
-function linkToPlayMode(raw: string | undefined): "off" | "dry" | "on" {
-  const v = (raw ?? "").trim().toLowerCase();
-  if (v === "") return "off";
-  if (v === "off" || v === "dry" || v === "on") return v;
-  throw new Error(`LINK_TO_PLAY must be off, dry or on (got ${JSON.stringify(raw)}).`);
-}
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const v = env[key];
@@ -512,7 +493,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
-    linkToPlay: linkToPlayMode(env.LINK_TO_PLAY),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
@@ -531,14 +511,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // bans it was supposed to place, silently.
   if (config.enforcementTick && !config.nitradoToken) {
     throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
-  }
-
-  // ⚠️ linkGateTick only ever writes `bans` rows — banTick is what applies them
-  // to Nitrado, so without enforcementTick on too, rows would pile up unapplied.
-  // `dry` writes nothing, but it is refused too so that turning it to `on`
-  // later cannot be the first moment the missing tick shows.
-  if (config.linkToPlay !== "off" && !config.enforcementTick) {
-    throw new Error(`LINK_TO_PLAY is ${config.linkToPlay} but ENFORCEMENT_TICK is off — ban rows would be written and never applied.`);
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule

@@ -252,11 +252,8 @@ anything.
   bot also now handles the gateway's `guildMemberRemove` event as it arrives
   (`guild-removal.ts`) — not on a schedule — dropping a departed user's roster row,
   identity link, solo declaration and guest passes in one transaction, handing off
-  leadership if they held it. Since link-to-play, `guild-sweep.ts` also catches users
-  who left while the bot was down (hourly, after a full member fetch, only while
-  `LINK_TO_PLAY` is `on`, never under `dry`; each cache miss is confirmed by a REST member fetch, and
-  only Discord's Unknown Member removes; more than `LINK_SWEEP_MAX_PER_PASS` missing means
-  it removes nobody and alerts ops once), which reverses ruling 10. `/guest grant`/`/guest revoke` are real commands now (`commands/guest.ts`)
+  leadership if they held it. Users who left while the bot was down are not caught up
+  (ruling 10); link-to-play's hourly `guild-sweep.ts` did that, and went with it. `/guest grant`/`/guest revoke` are real commands now (`commands/guest.ts`)
   — see below; the hand-written `handleGuestCommand` and its channel-bound `/guest user:`
   form are gone as of plan 2.
   (The raid-window tick that ran after `restart-tick.ts` is gone: raiding is 24/7 — see the
@@ -426,7 +423,7 @@ anything.
 | Deploy runbooks | `docs/deploy/` |
 | (History) The raid window | Gone (unreleased after v2.21.0): raiding is 24/7. Base damage is always on, set once in the nasdara repo's `cfggameplay.json` (`disableBaseDamage: false`), and the bot never reads or writes that file. Deleted: `raid-window-tick.ts`, `raid-window-text.ts`, `apps/bot/src/cfggameplay.ts` and the restart tick's `applyGameplay`, `packages/domain/src/raid-window.ts` (`raidWindowAt`) and `RAID_WINDOW`, the roster's `baseDamageWindow`, the site timer bar's raid column, `pnpm raid:skip` and the runbook-drift test. `raid_window_flips`/`raid_window_skips`/`raid_window_announcements` (migration `0037_fresh_moira_mactaggert.sql`) stay with their rows; nothing writes or reads them. The scoring week still closes Sunday 14:00 UTC — it only used to coincide with the window's close. `RAID_WINDOW_TICK` is ignored. Old runbook: `docs/deploy/raid-window.md` |
 | Raid value scoring (a raid pays the victim clan's live price), the weekly raid award, and the season rescore | Pure maths in `packages/domain/src/raid-value.ts` (`clanValue`, `raidPoints`, `valueReasons`: value = (`RAID_VALUE_BASE` + heat) × hit halvings, from season raid rows) and `scoring-week.ts` (`scoringWeekStartOf`/`scoringWeekEnd`, Sunday 14:00 UTC weeks, the bridging week). Detection in `apps/bot/src/raid-detect.ts` (`classifyLower`, with the replay option; base raids, own-flag-on-your-base raids, away raids from a member's raise), pricing and the online flag in `raid-tick.ts` (away raids queue the `flag_lowered_away` notice). Rescore in `apps/bot/src/rescore.ts` via `pnpm rescore:season` (`scripts/rescore-season.ts`); runbook `docs/deploy/2026-11-06-raid-value.md`. Weekly kit in `apps/bot/src/raid-award.ts` (`payRaidAwards`, gated on `RAID_AWARD_TICK`, record in `raid_award_weeks`). The price list: `packages/roster/src/scoring.ts` (`clansOnlineAt`), `packages/copy/src/scoreboard.ts`, `apps/bot/src/scoreboard-post.ts`. Constants in `rules.ts`, numbers in the guide via `guide-numbers.ts`. ⚠️ A raid's own row never prices itself: pass `excludeRaidId` to `clanValue`, or a replay prices a raid against itself. ⚠️ `SCORING_WEEK_CUTOVER` (2026-11-08T14:00Z) is fixed, not derived; weeks closed before it are frozen (old `week_start`, `alpha_weeks`, no kit), and moving it re-keys stored weeks. ⚠️ One lowering is never two raids: at a declared pole the base rule wins for a non-member, and the own-flag-on-your-base rule fires only when the lowerer is that base's own member. ⚠️ The rescore is re-runnable, dry-run by default, and inserts away raids only (it rewrites `points` and `victim_online`, never `week_start`); run it with the bot stopped. ⚠️ The price shown equals the price paid: `clansOnlineAt` in roster and `clanOnlineAt` in raid-detect are twin online queries, so change them together. ⚠️ `raid_award_weeks` is the payment record: its insert is the idempotency guard, and `RAID_AWARD_FIRST_WEEK` keeps old ranked weeks from paying. |
-| Link to play (an unlinked gamertag gets one hour of play, then an `unlinked` ban) | Rule `packages/domain/src/link-gate.ts` (constants `LINK_TO_PLAY_*`, `LINK_SWEEP_*` in `rules.ts`); the tick `apps/bot/src/link-gate-tick.ts` runs per server just before `banTick`, gated on `LINK_TO_PLAY` (`off`/`dry`/`on`, requires `ENFORCEMENT_TICK`) and never calls Nitrado; `identity_link_ends` (migration 0074, written by an AFTER DELETE trigger on `identity_links`) is how a lost link is seen; `bans.nitrado_added` lets `banTick` remove only what a ban added, and `bans.nitrado_attempted` (migration 0075, from `BanWriteError.attempted`) what a failed `addBans` may have written; the hourly guild sweep `apps/bot/src/guild-sweep.ts`, run only with `LINK_TO_PLAY=on` (`dry` touches nothing). ⚠️ The gate never closes a `pending` row with `attempts > 0`: its names may be on the list. ⚠️ `LINK_TO_PLAY_FROM` is a fixed instant set by release, not derived. ⚠️ Only `reason = 'unlinked'` rows are written, lifted or closed by it; roll back by setting them `lift_pending`, never `lifted`. ⚠️ `dry` reports each gamertag once per process. Spec `docs/superpowers/specs/2026-11-06-link-to-play-design.md`, runbook `docs/deploy/2026-11-10-link-to-play.md` |
+| (History) Link to play | Gone (unreleased after v2.21.0): unlinked gamertags are no longer banned. Every open `unlinked` ban was lifted in production first (rows set `lift_pending`, which `banTick` finishes). Deleted: `packages/domain/src/link-gate.ts` and the `LINK_TO_PLAY_*`/`LINK_SWEEP_*` constants, `apps/bot/src/link-gate-tick.ts`, the hourly guild sweep `apps/bot/src/guild-sweep.ts` (and `GuildGateway.fetchMemberExists`, which only it used), the `/link` and link-page "Back on the server" line (`GATE_COPY`, `LinkStatus.challenge.gate`) and the guide's lock-out text. Kept: `banTick`, `bans.nitrado_added`/`nitrado_attempted`, and `unlinked` as a ban reason so old rows still read and render. `identity_link_ends` and its AFTER DELETE trigger (migration 0074) stay because removing them needs a migration; the trigger still writes rows and nothing reads them. `LINK_TO_PLAY` is ignored. Old spec and runbook: `docs/superpowers/specs/2026-11-06-link-to-play-design.md`, `docs/deploy/2026-11-10-link-to-play.md` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | Repo tooling config (lifecycle, CI, ignore, scanning, dependencies) | `.keel.json`, `.rigging.json`, `.stow.json`, `.hull.json`, `.bosun.json` — each owned by its shipyard plugin and **regenerated, not hand-edited**: change the config and re-run that plugin's `init`. ⚠️ `.gitignore` is a *managed merge* — entries inside the `# >>> stow:... >>>` markers are overwritten every run, so hand-written ones must sit outside them |
@@ -550,7 +547,8 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   The achievements tick writes the three achievement tables in exactly that order inside each
   owner's transaction, before it appends that owner's notices.
   `identity_link_ends` is outside the order: written only by the AFTER DELETE trigger on
-  `identity_links`, inside whichever transaction deletes the link, and read by the link-gate tick.
+  `identity_links`, inside whichever transaction deletes the link, and read by nothing since
+  link-to-play went.
   `server_restarts` and `vehicle_wipe_announcements` are outside the order: each written by
   one tick alone, with a single statement, touching no other table.
   `release_announcements` is outside the order for the same reason: written by
@@ -757,10 +755,8 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   never the package root — `packages/roster/test/exports.test.ts` and
   `apps/web/test/smoke.test.ts` both pin the allowlist). It runs from
   `apps/bot/src/guild-removal.ts`'s `guildMemberRemove` handler, which checks the
-  event's guild id against `DISCORD_GUILD_ID` before it ever reaches the store —
-  the hourly `guild-sweep.ts` backstop also calls it, for removals that happened while
-  the bot was down (it reverses ruling 10; only with `LINK_TO_PLAY=on`; it confirms each user
-  by REST member fetch, and halts and alerts ops past `LINK_SWEEP_MAX_PER_PASS`).
+  event's guild id against `DISCORD_GUILD_ID` before it ever reaches the store. (The
+  hourly `guild-sweep.ts` backstop that also called it went with link-to-play.)
 - **Nicknames and guest-pass voice overwrites are reconciled by `structureTick`, never
   fire-and-forget** — the same discipline 3b established for roles/channels/`@Linked`.
   Step 7 diffs each clan voice channel's member overwrites against its open guest
