@@ -11,7 +11,7 @@ describe("buildStoryContext", () => {
   it("builds an empty week: empty lists, S1 E3, no previous", async () => {
     const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: ["ADM"], previous: "db" });
     expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3, alpha: null });
-    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
+    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [], bounties: [], airdrops: [], previous: null });
     expect(context.players).toEqual({ topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] });
     expect(texts.entries()).toEqual([]);
   });
@@ -39,14 +39,12 @@ describe("buildStoryContext", () => {
     await fx.factionEvent(sna, "founded", at(0, 1), { tag: "OLDTAG_X", name: "OLDNAME_X", actor: "GoldSkull588", texture: "Flag_Zagorky" });
     await fx.factionEvent(sna, "renamed", at(0, 2), { name: "SNA", previousName: "OLDNAME_X" });
     await fx.kill({ at: at(1), killer: "dayz-GOLD-ID", victim: "v", killerClan: sna });
-    await fx.koth({ location: "gliniska", slotAt: at(3, 20), top: [{ dayzId: "dayz-KOTH-GHOST", gamertag: "dayz-KOTH-GHOST", kills: 5 }] });
     const { context } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: "db" });
     const json = JSON.stringify(context);
     expect(json).not.toContain("OLDNAME_X");
     expect(json).not.toContain("OLDTAG_X");
     expect(json).not.toContain("Flag_Zagorky");
     expect(json).not.toContain("dayz-GOLD-ID");
-    expect(json).not.toContain("dayz-KOTH-GHOST");
     expect(json).not.toContain("disc-");
     expect(json).toContain("GoldSkull588");
   });

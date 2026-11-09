@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- King of the Hill. Events, `/koth` and `/kothvote` are gone. Past results and any prizes already won stay.
+
 ## [2.21.0] - 2026-11-09
 
 ### Removed

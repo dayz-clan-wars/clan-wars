@@ -32,11 +32,7 @@ import { announceTick } from "./announce-tick.js";
 import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
-import { kothTick } from "./koth-tick.js";
 import { referralAwardTick } from "./referral-award-tick.js";
-import { kothVoteTick } from "./koth-vote-tick.js";
-import { kothDecideTick } from "./koth-decide-tick.js";
-import { voteButtons, type KothVoteChannel } from "./koth-vote-channel.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -594,30 +590,6 @@ export function createChannelPoster(
 }
 
 /**
- * The KotH vote's one message. ⚠️ `allowedMentions: { parse: [] }` on post AND
- * edit: the message carries a gamertag, and an edit re-parses mentions.
- */
-export function createKothVoteChannel(client: Client, channelId: string): KothVoteChannel {
-  const fetchChannel = async (id: string) => {
-    const channel = await client.channels.fetch(id);
-    if (!channel?.isSendable() || !channel.isTextBased() || channel.isDMBased()) {
-      throw new Error(`channel ${id} is missing or not sendable by this bot`);
-    }
-    return channel;
-  };
-  return {
-    async post(content, voteId) {
-      const sent = await (await fetchChannel(channelId)).send({ content, components: [voteButtons(voteId)], allowedMentions: { parse: [] } });
-      return { channelId, messageId: sent.id };
-    },
-    async edit(id, messageId, content, voteId) {
-      const msg = await (await fetchChannel(id)).messages.fetch(messageId);
-      await msg.edit({ content, components: voteId === null ? [] : [voteButtons(voteId)], allowedMentions: { parse: [] } });
-    },
-  };
-}
-
-/**
  * `channel` → `client.channels.fetch`; `dm` → `client.users.fetch(id).send`.
  * Neither falls back to the other — a clan_notices row already carries the
  * discord target its writer decided on, and a DM row with closed DMs is
@@ -721,15 +693,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   const bountyPoster = cfg.bounties.enabled && cfg.serverEventsChannelId
     ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
     : null;
-  // ⚠️ A separate poster on the same channel, with mentions off: a KotH post carries a
-  // gamertag and free-text location/reason, and escaping markdown does not stop
-  // Discord parsing a literal @everyone. See createChannelPoster's comment.
-  const kothPoster = cfg.koth.enabled && cfg.serverEventsChannelId
-    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
-    : null;
-  // ⚠️ Built whenever the channel exists, not only with KOTH_VOTE on: a vote open
-  // when the flag goes off must still be closed and its message edited.
-  const kothVoteChannel = cfg.koth.enabled && cfg.serverEventsChannelId ? createKothVoteChannel(client, cfg.serverEventsChannelId) : null;
   // ⚠️ A separate poster on the same channel, with mentions off: the winners post
   // carries a gamertag. See createChannelPoster's comment.
   const referralPoster = cfg.referralAward.enabled && cfg.serverEventsChannelId
@@ -744,8 +707,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db,
     bountiesEnabled: cfg.bounties.enabled,
-    koth: kothPoster,
-    kothVote: kothVoteChannel ? { enabled: cfg.koth.vote.enabled, channel: kothVoteChannel } : null,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
@@ -1860,7 +1821,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, koth: { open: cfg.koth.enabled } });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1886,40 +1847,6 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
       } catch (err) {
         console.error("raid window tick failed", err);
-      }
-    }
-
-    // ⚠️ Vote tick → automatic decision, in that order (tick-order.test.ts): a vote
-    // closing at T−30 inserts its row before the decision looks. Each its own
-    // try/catch: a throw in one must leave the other deciding as normal.
-    if (kothVoteChannel) {
-      try {
-        const v = await kothVoteTick(db, kothVoteChannel, kothPoster!, { now: new Date(), enabled: cfg.koth.vote.enabled });
-        if (v.closed + v.posted > 0) console.log(`kothvote: ${v.closed} closed, ${v.posted} posted`);
-      } catch (err) {
-        console.error("koth vote tick failed", err);
-      }
-    }
-    if (cfg.koth.auto.enabled) {
-      try {
-        const d = await kothDecideTick(db, kothPoster!, { now: new Date(), weeklyCap: cfg.koth.auto.weeklyCap, minPop: cfg.koth.auto.minPop });
-        if (d.decided + d.posted > 0) console.log(`koth: ${d.decided} decided automatically, ${d.posted} posted`);
-      } catch (err) {
-        console.error("koth decision tick failed", err);
-      }
-    }
-
-    // ⚠️ AFTER the restart tick, like every server-events poster: a slow Discord
-    // call must never delay a due restart. Its own try/catch.
-    // ⚠️ Gated on the flag alone — config load refuses KOTH_TICK without
-    // SERVER_EVENTS_CHANNEL_ID, so kothPoster is non-null here.
-    if (cfg.koth.enabled) {
-      try {
-        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        const k = await kothTick(db, { announce: kothPoster!, ops: opsPoster }, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
-        if (k.posted + k.failed + k.scored > 0) console.log(`koth: ${k.posted} posted, ${k.failed} failed, ${k.scored} scored`);
-      } catch (err) {
-        console.error("koth tick failed", err);
       }
     }
 
@@ -2013,11 +1940,6 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
-
-    if (cfg.koth.enabled) console.log("king of the hill on");
-    else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");
-    if (cfg.koth.auto.enabled) console.log(`king of the hill automation on (cap ${cfg.koth.auto.weeklyCap}/week, floor ${cfg.koth.auto.minPop})`);
-    if (cfg.koth.vote.enabled) console.log("king of the hill voting on");
 
     if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
     if (!cfg.raidAward.enabled) console.warn("RAID_AWARD_TICK is off: weeks still close, but the top raiding clan gets no weapon kit.");

@@ -33,7 +33,7 @@ export function loadAwards(json: unknown): Awards {
     if (typeof v?.label !== "string" || v.label === "") throw new Error(`awards: ${key} has no label`);
     // ⚠️ The same ceiling `/award grant days:` has. The grant checks its
     // length against it, so a default above it would be refused on every
-    // grant, and KotH and the referral payout retry a refused grant forever.
+    // grant, and the referral payout retries a refused grant forever.
     if (!Number.isInteger(v.durationDays) || (v.durationDays as number) <= 0 || (v.durationDays as number) > AWARD_MAX_DAYS) {
       throw new Error(`awards: ${key} durationDays must be a whole number from 1 to ${AWARD_MAX_DAYS}`);
     }

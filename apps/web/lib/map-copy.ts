@@ -117,7 +117,6 @@ export const ITEM_COPY = {
     "supply kit": "In the build supplies at a clan's flag.",
     "booster kit": "A booster kit pick.",
     award: "Given as an award.",
-    "KotH loadout": "In a King of the Hill loadout.",
   },
 } as const;
 

@@ -131,7 +131,7 @@ export async function payWellAwards(db: Database, opts: { now: Date; siteBaseUrl
         .where(eq(identityLinks.dayzId, w.dayzId)).for("share");
       if (!link) return false;
       // ⚠️ An award that left the catalogue is recorded, never thrown: grantAwardTx
-      // would refuse it every tick forever. KotH's and the bounties' rule.
+      // would refuse it every tick forever. The bounties' rule.
       if (!awardsCatalogue()[AWARD_KEY]) {
         const failure = `award "${AWARD_KEY}" is no longer in awards.json; grant it by hand with /award grant`;
         await tx.update(wellAwards).set({ awardFailure: failure }).where(eq(wellAwards.id, w.id));

@@ -8,7 +8,7 @@ import { grantAwardTx } from "@factions/roster/internal";
 import { SESSIONS_CONSUMER } from "./sessions-tick.js";
 
 /**
- * ⚠️ All three, never one (spec §6, the lesson of KotH's `scoringReady`): the grace
+ * ⚠️ All three, never one (spec §6, the lesson of King of the Hill's old `scoringReady`): the grace
  * covers log lag, the "seen past the end" test covers a stalled ingest, and the
  * cursor test covers a bot catching up. Without them a restart after downtime
  * closes a half-ingested week and pays the wrong player, for good.

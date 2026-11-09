@@ -1,9 +1,8 @@
-import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, kothEvents, type Database } from "@factions/db";
-import { kothTownName, restartSlot, truckWipeActive, rotationActiveFor, fixedWipeActiveFor, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, raidWindowAt, type SkippedWindow } from "@factions/domain";
+import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
+import { restartSlot, truckWipeActive, rotationActiveFor, fixedWipeActiveFor, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, raidWindowAt, type SkippedWindow } from "@factions/domain";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
-import { setBaseDamageDisabled, setSpawnGearPresets } from "./cfggameplay.js";
-import { planKoth, convergeKothFiles, type KothPlan } from "./koth-converge.js";
+import { setBaseDamageDisabled } from "./cfggameplay.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -15,8 +14,6 @@ export type RestartTarget = {
   missionRootDir(): Promise<string>;
   downloadFile(path: string): Promise<string>;
   uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
-  /** Only reached for King of the Hill: one listing of custom/ proves every preset is on the server. */
-  listFiles(dir: string): Promise<string[]>;
 };
 
 /** Which events.xml entries the wipe owns, the UTC window they are off for, and
@@ -93,47 +90,41 @@ export type RaidFlip = {
 export type GameplayEdits = {
   /** Present when RAID_WINDOW_TICK is on. */
   raidWindow?: { skips: SkippedWindow[] };
-  /** Present when King of the Hill is on. The wanted `spawnGearPresetFiles` list. */
-  koth?: { presets: string[] };
 };
 
 export type GameplayResult = {
   flip?: RaidFlip;
   flipError?: Error;
-  koth?: { changed: boolean };
-  kothError?: Error;
   /**
-   * Whether the upload actually happened — `json !== original` after both
-   * splices, regardless of which edit (or edits) caused it.
+   * Whether the upload actually happened — `json !== original` after every
+   * splice, regardless of which edit caused it.
    *
    * ⚠️ This is the fact the raid-window bookkeeping's `previousContent`
-   * recording must key on, NOT `flip.changed` alone. A slot where the KotH
-   * preset edit changes the file and the raid splice does not overwrites the
-   * file while `flip.changed` is false —
-   * `flip.changed` and "the file was overwritten" stopped being the same fact
-   * the moment a second feature started sharing the upload gate.
+   * recording keys on, NOT `flip.changed`. With the raid splice the only edit
+   * left (King of the Hill's preset splice is gone) the two agree, but they are
+   * different facts: keep them apart so a future second edit to this file does
+   * not reintroduce the clobbered-rollback bug described at the upsert below.
    */
   uploaded?: boolean;
 };
 
 /**
- * Bring one server's cfggameplay.json to the state `slot` wants — both the raid
- * window's `GeneralData.disableBaseDamage` and King of the Hill's
- * `spawnGearPresetFiles` list — immediately before its restart.
+ * Bring one server's cfggameplay.json to the state `slot` wants — the raid
+ * window's `GeneralData.disableBaseDamage` — immediately before its restart.
  *
- * ⚠️ ONE download and ONE upload, for BOTH features (spec §5). They edit the same
- * file on the same slot; two independent download/upload pairs mean whichever
- * uploads second silently discards the other's edit, with every guard passing and
- * nothing logged. That is the entire reason this function exists rather than two.
+ * ⚠️ ONE download and ONE upload per slot. King of the Hill used to splice its
+ * presets into the same round trip (removed); any future edit to this file must
+ * join this function too, because two independent download/upload pairs mean
+ * whichever uploads second silently discards the other's edit, with every guard
+ * passing and nothing logged.
  *
- * ⚠️ Level-triggered, exactly like applyEvents. Every slot recomputes both
- * wanted values, so a bot down across Friday 14:00 opens the window LATE rather
+ * ⚠️ Level-triggered, exactly like applyEvents. Every slot recomputes the
+ * wanted value, so a bot down across Friday 14:00 opens the window LATE rather
  * than not at all, and a lost, hand-reverted or FTP-deploy-clobbered write is
  * corrected within two hours (spec §6).
  *
- * ⚠️ Each splice is attempted in its OWN try/catch and its refusal is RETURNED,
- * never thrown. A guard rejecting the KotH presets must not cost the raid weekend, and
- * vice versa; the caller records each outcome against its own feature's rows.
+ * ⚠️ The splice's refusal is RETURNED, never thrown; the caller records it
+ * against the raid window's own rows.
  *
  * ⚠️ The returned `boundaryAt` (on `flip`) is the WINDOW boundary, never the
  * slot — a Saturday repair belongs to that Friday's row, not to Saturday's.
@@ -145,7 +136,7 @@ export type GameplayResult = {
 export async function applyGameplay(
   nitrado: RestartTarget, slot: Date, edits: GameplayEdits,
 ): Promise<GameplayResult> {
-  if (!edits.raidWindow && !edits.koth) return {};
+  if (!edits.raidWindow) return {};
 
   const dir = await nitrado.missionRootDir();
   const original = await nitrado.downloadFile(`${dir}/${GAMEPLAY_FILE}`);
@@ -170,32 +161,12 @@ export async function applyGameplay(
     }
   }
 
-  if (edits.koth) {
-    try {
-      const r = setSpawnGearPresets(json, edits.koth.presets);
-      json = r.json;
-      out.koth = { changed: r.changed };
-    } catch (err) {
-      out.kothError = err instanceof Error ? err : new Error(String(err));
-    }
-  }
-
   const uploaded = json !== original;
   if (uploaded) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
   return { ...out, uploaded };
 }
 
 export const RESTART_MESSAGE = "Scheduled restart";
-
-/**
- * The in-game restart warning. A King of the Hill session names its town (KotH
- * spec §5.5) — that is the half of the announcement that reaches everyone who is
- * not in Discord.
- */
-export function restartMessage(koth: string | null = null): string {
-  // Arrives as a display name (`kothTownName`), already cased.
-  return koth ? `${RESTART_MESSAGE}. King of the Hill at ${koth} next session.` : RESTART_MESSAGE;
-}
 
 type Outcome = "restarted" | "skipped" | "missed";
 
@@ -238,8 +209,6 @@ export async function restartTick(
   nitradoFor: (serviceId: number) => RestartTarget,
   opts: {
     now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow;
-    /** ⚠️ `open` is KOTH_TICK. Absent means off: a session is only ever opened on purpose. The restore runs regardless. */
-    koth?: { open: boolean };
   },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
@@ -280,35 +249,6 @@ export async function restartTick(
         lastError.delete(s.id);
         continue;
       }
-
-      // ⚠️ King of the Hill (spec §5). Planned for EVERY server being restarted
-      // whenever any KotH row exists, whether or not KOTH_TICK is set — the
-      // restore must still run if the feature is switched off mid-event.
-      // Its own try/catch: KotH must never cost the restart. A plan that throws
-      // leaves every KotH file as it is; the next slot plans again.
-      let koth: KothPlan | null = null;
-      try {
-        koth = await planKoth(db, nitrado, s.id, slot.start, { allowOpen: opts.koth?.open ?? false });
-      } catch (err) {
-        console.error(`koth: server ${s.id} could not plan slot ${slot.start.toISOString()} — restarting anyway`, err);
-      }
-      // ⚠️ The row this slot is opening, nulled the moment any edit for it fails.
-      // It is what the restart message advertises and what goes `live` after the
-      // POST, so a session that failed half-way is neither announced in game nor
-      // recorded as running; the next slot's restore arm puts the files back.
-      let kothOpening = koth?.opening ?? null;
-      const failKoth = async (reason: string): Promise<void> => {
-        const row = kothOpening;
-        kothOpening = null;
-        if (!row) return;
-        console.error(`koth: server ${s.id} failed to open ${row.location} for slot ${slot.start.toISOString()} — ${reason}; restarting anyway`);
-        // ⚠️ Only from `scheduled`, and merged into `detail`, never replacing it.
-        // ⚠️ Swallowed: bookkeeping must never cost the restart.
-        await db.update(kothEvents).set({
-          state: "failed",
-          detail: sql`${kothEvents.detail} || ${JSON.stringify({ failure: reason })}::jsonb`,
-        }).where(and(eq(kothEvents.id, row.id), eq(kothEvents.state, "scheduled"))).catch(() => undefined);
-      };
 
       // ⚠️ BEFORE the restart POST, and only for a server actually being restarted:
       // DayZ reads events.xml at boot, so a write after the POST would not take
@@ -356,17 +296,7 @@ export async function restartTick(
           raidBoundaryAt = state.boundaryAt;
           edits.raidWindow = { skips };
         }
-        // ⚠️ Same guard as the whole files below: an opening that already failed
-        // (a refused narrowing or globals edit) must not put KotH's presets in
-        // the file — the row is `failed` and nothing would ever advertise the session.
-        if (koth?.presets && (koth.opening === null || kothOpening !== null)) edits.koth = { presets: koth.presets };
-
         const gameplay = await applyGameplay(nitrado, slot.start, edits);
-
-        if (gameplay.kothError) {
-          console.error(`koth: server ${s.id} REFUSED the preset splice for slot ${slot.start.toISOString()}`, gameplay.kothError);
-          await failKoth(gameplay.kothError.message);
-        }
 
         if (opts.raidWindow?.enabled) {
           const boundaryAt = raidBoundaryAt!;
@@ -427,11 +357,11 @@ export async function restartTick(
                 // ⚠️ Keyed on `gameplay.uploaded`, NOT `flip.changed`. Only a write
                 // that actually overwrote the file has something to recover; a
                 // no-change slot must not clobber a real pre-edit copy with the
-                // identical current contents. Since KotH's preset edit can also cause
-                // this upload, `flip.changed` alone is no longer "the file was
-                // overwritten" — a slot where KotH changes the file and the raid
-                // splice does not still overwrites it, and `previousContent` must
-                // still be recorded for that write.
+                // identical current contents. While King of the Hill's preset edit
+                // shared this upload (removed), `flip.changed` alone was not "the
+                // file was overwritten" — a slot where only KotH changed the file
+                // still overwrote it, and `previousContent` had to be recorded for
+                // that write. Keyed on the upload so a future second edit stays safe.
                 ...(gameplay.uploaded ? { previousContent: flip.previousContent } : {}),
               }).onConflictDoUpdate({
                 target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
@@ -455,7 +385,8 @@ export async function restartTick(
                 // (must not clobber an already-applied row's `applied_at`/
                 // `previousContent`). `gameplay.uploaded` answers a DIFFERENT
                 // question — "did the upload happen at all, for either feature" —
-                // and using it here was the bug: a KotH-only upload on an
+                // and using it here was the bug: a KotH-only upload (King of the Hill,
+                // since removed) on an
                 // ALREADY-applied boundary (the Saturday opening, after Friday already
                 // recorded the true pre-flip copy) made `gameplay.uploaded` true
                 // with `flip.changed` still false, and the unconditional branch it
@@ -498,28 +429,9 @@ export async function restartTick(
 
       } catch (err) {
         console.error(`restart: server ${s.id} could not evaluate cfggameplay.json for slot ${slot.start.toISOString()} — restarting anyway`, err);
-        // ⚠️ Same fact for KotH: nothing proves its presets reached the file.
-        if (koth?.presets) await failKoth(`cfggameplay.json: ${err instanceof Error ? err.message : String(err)}`);
       }
 
-      // The four whole files (spec §2.3), last before the POST. ⚠️ An opening that
-      // has already failed does not upload its town files: the row is `failed`, the
-      // next slot restores, and every file not uploaded now is one less to undo.
-      if (koth && koth.files.length > 0 && (koth.opening === null || kothOpening !== null)) {
-        try {
-          const f = await convergeKothFiles(nitrado, koth.files);
-          if (f.uploaded > 0) console.log(`koth: server ${s.id} wrote ${f.uploaded} file(s) for ${slot.start.toISOString()}`);
-          if (f.errors.length > 0) {
-            console.error(`koth: server ${s.id} could not write ${f.errors.join("; ")}`);
-            await failKoth(f.errors.join("; "));
-          }
-        } catch (err) {
-          console.error(`koth: server ${s.id} file convergence failed for slot ${slot.start.toISOString()}`, err);
-          await failKoth(`files: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-
-      await nitrado.restart(restartMessage(kothOpening ? kothTownName(kothOpening.location) : null));
+      await nitrado.restart(RESTART_MESSAGE);
       // ⚠️ An upload whose restart did not happen is NOT in effect. Confirmation is
       // what the website and the open/close announcements read; recording it before
       // the restart would make them assert a flip the server has not loaded.
@@ -545,19 +457,6 @@ export async function restartTick(
           // website reads "not yet confirmed" and no open/close message posts, until
           // a later slot's restart succeeds and this same lookup confirms it.
           .catch(() => undefined);
-      }
-      if (kothOpening) {
-        // ⚠️ Only after the POST, and only from `scheduled`: a row a failed edit
-        // above already moved to `failed` must stay failed, and a session is only
-        // live once the server has actually loaded it. A
-        // failed POST leaves it `scheduled`, so the retry inside the grace window
-        // opens it again with the snapshots the first attempt already wrote.
-        // ⚠️ Swallowed, like the raid window's confirm: a throw here would abort the slot's
-        // server_restarts row and restart the server a second time.
-        await db.update(kothEvents).set({ state: "live", openedAt: opts.now })
-          .where(and(eq(kothEvents.id, kothOpening.id), eq(kothEvents.state, "scheduled")))
-          .catch(() => undefined);
-        console.log(`koth: server ${s.id} opened ${kothOpening.location} for ${slot.start.toISOString()}`);
       }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;

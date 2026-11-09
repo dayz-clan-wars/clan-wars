@@ -21,7 +21,7 @@ function ctx(over: Partial<StoryContext> = {}): StoryContext {
     week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
     clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] },
-    bounties: [], koth: [], airdrops: [], previous: null,
+    bounties: [], airdrops: [], previous: null,
     ...over,
   };
 }
@@ -63,14 +63,13 @@ describe("collectNames", () => {
         bounties: [
           { target: "wanted", reason: null, placedAt: "", placedWhen: "", status: "claimed", claimer: "hunter", hoursToClaim: 1, claimMetres: 10 },
         ],
-        koth: [{ location: "Tisy", at: "", when: "", winner: "kingGuy", top: [{ gamertag: "kothTop", kills: 4 }] }],
         airdrops: [{ location: "NWAF", at: "", when: "", state: "looted" }],
         previous: { title: "t", storylines: [{ title: "s", players: ["oldFeud"], clans: ["OLD"], status: "open", openQuestions: [] }] },
       }),
     );
     for (const n of [
       "Alpha Clan", "ALP", "raiderGuy", "Wolf Pack", "WLF", "Bears", "BR", "Newbies", "NEW", "ffKiller", "ffVictim",
-      "Beefers", "BF", "topK", "deadGuy", "sniper", "shotGuy", "oddGuy", "wanted", "hunter", "kingGuy", "kothTop",
+      "Beefers", "BF", "topK", "deadGuy", "sniper", "shotGuy", "oddGuy", "wanted", "hunter",
       "oldFeud", "OLD",
     ]) {
       expect(r.names).toContain(n);

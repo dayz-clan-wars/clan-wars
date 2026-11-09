@@ -9,7 +9,6 @@ import { exposeLocksTx } from "./vault-store";
 import { gamertagOrId } from "./feed-actor";
 import { noticeClanTx } from "./notices";
 import { revokeAwardsForTx } from "./award-admin";
-import { dropKothBallotsTx } from "./koth-ballots";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -85,7 +84,6 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
     // holds one. Nothing else is locked on this path, so taking award_grants
     // here cannot invert the lock order.
     if (!link) {
-      await dropKothBallotsTx(tx, a.discordId);
       return { ...NOTHING, revokedAwards: await revokeAwardsForTx(tx, a.discordId, a.at) };
     }
 
@@ -180,7 +178,6 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           await exposeLocksTx(tx, { factionId: candidate!.factionId, leaverRole: "leader", at: a.at });
 
           await revokePassesTx(tx, a.discordId, a.at);
-          await dropKothBallotsTx(tx, a.discordId);
           // award_grants sits after guest_passes and before faction_events and
           // clan_notices in the lock order (awards spec §3.5).
           revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
@@ -198,7 +195,6 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // — the decision was made above.
           await disbandFactionTx(tx, candidate!.factionId, sql`true`);
           await revokePassesTx(tx, a.discordId, a.at);
-          await dropKothBallotsTx(tx, a.discordId);
           // award_grants sits after guest_passes and before faction_events and
           // clan_notices in the lock order (awards spec §3.5).
           revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
@@ -229,7 +225,6 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
         }
 
         await revokePassesTx(tx, a.discordId, a.at);
-        await dropKothBallotsTx(tx, a.discordId);
         // award_grants sits after guest_passes and before faction_events and
         // clan_notices in the lock order (awards spec §3.5).
         revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
@@ -242,7 +237,6 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
       }
     } else {
       await revokePassesTx(tx, a.discordId, a.at);
-      await dropKothBallotsTx(tx, a.discordId);
       // award_grants sits after guest_passes and before faction_events and
       // clan_notices in the lock order (awards spec §3.5).
       revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);

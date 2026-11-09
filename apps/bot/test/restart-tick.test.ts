@@ -621,50 +621,31 @@ describe("restartTick", () => {
 });
 
 describe("applyGameplay", () => {
-  // ⚠️ THE test for this task. Two independent download/upload pairs on the same
-  // file in the same slot means the second upload silently discards the first's
-  // edit: a raid weekend that never opens, or a drop that never lands, with every
-  // guard passing and nothing logged.
-  it("carries both edits in ONE download and ONE upload", async () => {
+  it("flips in ONE download and ONE upload, leaving the preset list alone", async () => {
     const host = fakeGameplayHost();
-    const presets = ["koth-hill.json", ...JSON.parse(GAMEPLAY).PlayerData.spawnGearPresetFiles as string[]];
-    const out = await applyGameplay(host.target, at("2026-09-18T16:00:00Z"), {
-      raidWindow: { skips: [] },
-      koth: { presets },
-    });
+    const presets = JSON.parse(GAMEPLAY).PlayerData.spawnGearPresetFiles as string[];
+    const out = await applyGameplay(host.target, at("2026-09-18T16:00:00Z"), { raidWindow: { skips: [] } });
     expect(host.downloadFile).toHaveBeenCalledTimes(1);
     expect(host.uploadFile).toHaveBeenCalledTimes(1);
+    expect(out.uploaded).toBe(true);
     const after = JSON.parse(host.read());
     expect(after.GeneralData.disableBaseDamage).toBe(out.flip!.wantedDisabled);
     expect(after.PlayerData.spawnGearPresetFiles).toEqual(presets);
   });
 
-  it("uploads nothing when neither edit changes anything", async () => {
+  it("uploads nothing when the flip changes nothing", async () => {
     const host = fakeGameplayHost();
     await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), { raidWindow: { skips: [] } });
     expect(host.uploadFile).not.toHaveBeenCalled();
   });
 
-  it("downloads nothing when neither feature is configured", async () => {
+  it("downloads nothing when the raid window is off", async () => {
     const host = fakeGameplayHost();
     const out = await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), {});
     expect(host.downloadFile).not.toHaveBeenCalled();
     expect(out).toEqual({});
   });
 
-  // ⚠️ One refusal must not take the other feature down with it. A raid weekend is
-  // worth more than a KotH session, and a session is worth more than nothing.
-  it("still applies the raid flip when the KotH preset swap refuses", async () => {
-    const host = fakeGameplayHost();
-    // An empty preset list makes setSpawnGearPresets throw: fresh spawns would get no gear.
-    const out = await applyGameplay(host.target, at("2026-09-18T16:00:00Z"), {
-      raidWindow: { skips: [] }, koth: { presets: [] },
-    });
-    expect(out.kothError).toBeInstanceOf(Error);
-    expect(out.flip!.changed).toBe(true);
-    expect(host.uploadFile).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(host.read()).GeneralData.disableBaseDamage).toBe(false);
-  });
 });
 
 /** A Nitrado serving several files by path; records uploads by `${dir}/${name}`. */
@@ -679,7 +660,6 @@ function fakeFiles(files: Record<string, string>) {
   const target = {
     status: vi.fn(async () => "started"), restart: vi.fn(async () => {}),
     missionDbDir: vi.fn(async () => "/mission/db"), missionRootDir: vi.fn(async () => "/mission"),
-    listFiles: vi.fn(async (dir: string) => [...store.keys()].filter((k) => k.startsWith(dir + "/")).map((k) => k.slice(dir.length + 1)).filter((n) => !n.includes("/"))),
     downloadFile, uploadFile,
   } as unknown as RestartTarget;
   return { target, downloadFile, uploadFile, read: (p: string) => store.get(p) };
@@ -711,17 +691,3 @@ describe("applyEvents", () => {
     expect(h.uploadFile).not.toHaveBeenCalled();
   });
 });
-
-describe("applyGameplay with KotH", () => {
-  it("swaps the preset list in the same single round trip as the raid window", async () => {
-    const h = fakeGameplayHost();
-    const r = await applyGameplay(h.target, at("2026-09-12T14:00:00Z"), {
-      raidWindow: { skips: [] }, koth: { presets: ["./custom/koth-ak74-svd.json"] },
-    });
-    expect(r.koth?.changed).toBe(true);
-    expect(h.downloadFile).toHaveBeenCalledTimes(1);
-    expect(h.uploadFile).toHaveBeenCalledTimes(1);
-    expect(h.read()).toContain('"./custom/koth-ak74-svd.json"');
-  });
-});
-

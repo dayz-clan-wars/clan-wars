@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, admFiles, events, players, factions, factionMembers, factionEvents, seasons, seasonStandings,
-  kills, playerSessions, membershipHistory, raids, defenses, bounties, kothEvents, airdropEvents, showEpisodes, alphaWeeks,
+  kills, playerSessions, membershipHistory, raids, defenses, bounties, airdropEvents, showEpisodes, alphaWeeks,
   type Database,
 } from "@factions/db";
 
@@ -27,7 +27,7 @@ export type Fx = Awaited<ReturnType<typeof makeFixture>>;
 export async function makeFixture(db: Database) {
   await db.transaction(async (tx) => {
     await tx.execute(sql`set local client_min_messages = warning`);
-    await tx.execute(sql`truncate table show_episodes, show_text_screening, show_pronunciations, airdrop_events, koth_events, bounties, kills, player_sessions, membership_history, defenses, alpha_weeks, season_standings, raids, faction_events, faction_members, seasons, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
+    await tx.execute(sql`truncate table show_episodes, show_text_screening, show_pronunciations, airdrop_events, bounties, kills, player_sessions, membership_history, defenses, alpha_weeks, season_standings, raids, faction_events, faction_members, seasons, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
   });
   const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
   const serverId = s!.id;
@@ -139,17 +139,6 @@ export async function makeFixture(db: Database) {
         onlineBudgetMs: 86_400_000, deadlineAt: new Date(a.placedAt.getTime() + 30 * 86_400_000),
         status: claimed ? "claimed" : "open", closedAt: claimed ? a.claimedAt! : null,
         claimedByDayzId: a.claimedBy ?? null, claimEventId: a.claimEventId ?? null, claimedAt: a.claimedAt ?? null,
-      });
-    },
-    // If a koth_events CHECK refuses this row, fill the column the error names (schema.ts `kothEvents`).
-    koth: async (a: { location: string; slotAt: Date; top: { dayzId: string; gamertag: string; kills: number }[] }) => {
-      const winner = a.top[0] ?? null;
-      await db.insert(kothEvents).values({
-        serverId, slotAt: a.slotAt, location: a.location, centreX: "0", centreZ: "0", state: "finished",
-        // koth_events_origin_scheduler requires scheduledByDiscordId non-null whenever
-        // origin is not 'auto'; origin defaults to 'admin', so this fills that CHECK.
-        scheduledByDiscordId: "admin",
-        results: { top: a.top, topKiller: winner, winner, droppedNoPosition: 0 },
       });
     },
     airdrop: async (a: { location: string; slotAt: Date }) => {

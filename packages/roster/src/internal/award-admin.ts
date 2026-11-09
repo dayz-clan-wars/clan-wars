@@ -18,8 +18,8 @@ type GrantValidation =
 /**
  * The key, reason and duration rule stated ONCE (finding I1/I2 of task 10's review): both
  * `grantAwardDb` (validates before it ever opens a transaction, so a bad key from
- * `/award grant` reports without a server lookup) and `grantAwardTx` (the KotH
- * scorer's own transaction, which has no separate validation step to run first)
+ * `/award grant` reports without a server lookup) and `grantAwardTx` (the payouts' own
+ * transactions, which have no separate validation step to run first)
  * call this rather than each re-checking the catalogue and the trimmed reason.
  */
 function validateAwardGrant(a: { awardKey: string; reason: string; durationDays?: number | null }): GrantValidation {
@@ -65,10 +65,9 @@ function presetPicks(def: AwardDef): Record<string, string> {
 }
 
 /**
- * The grant and its DM, inside a caller's transaction — for King of the Hill,
- * which must lock its own row first so a retry cannot grant twice (lock order:
- * koth_events → award_grants → clan_notices), and for a bounty's prize
- * (bounties → award_grants → clan_notices).
+ * The grant and its DM, inside a caller's transaction — for a payout that must
+ * lock its own row first so a retry cannot grant twice: a bounty's prize
+ * (bounties → award_grants → clan_notices), the well, raid and referral awards.
  */
 export async function grantAwardTx(tx: Tx, a: {
   awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date; serverId: number;
@@ -112,8 +111,7 @@ export async function grantAwardDb(db: Database, a: {
   const v = validateAwardGrant(a);
   if (!v.ok) return v;
   // ⚠️ `clan_notices.server_id` is NOT NULL, so the DM needs a server even
-  // though an award belongs to no clan. The one active server, picked the way
-  // `/koth` picks it.
+  // though an award belongs to no clan. The one active server.
   const [server] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
   if (!server) return { ok: false, reason: "no-server" };
   return db.transaction((tx) => grantAwardTx(tx, { ...a, serverId: server.id }));

@@ -155,8 +155,8 @@ describe("applySources and spawnsAnywhere", () => {
 
   it("⚠️ matches source names case-insensitively, as DayZ does", () => {
     const hat: ItemIndexEntry = { ...by("Orphan_Item"), className: "MK4Optic_Black" };
-    applySources([hat], { ...noSources, clanWars: new Map([["MK4Optic_black", ["KotH loadout"]]]), spawnGear: new Set(["mk4optic_BLACK"]) });
-    expect(hat.clanWars).toEqual(["KotH loadout"]);
+    applySources([hat], { ...noSources, clanWars: new Map([["MK4Optic_black", ["award"]]]), spawnGear: new Set(["mk4optic_BLACK"]) });
+    expect(hat.clanWars).toEqual(["award"]);
     expect(hat.spawnGear).toBe(true);
   });
 

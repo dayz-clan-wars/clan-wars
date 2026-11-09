@@ -170,12 +170,6 @@ export type BotConfig = {
    */
   wellAwards: { enabled: boolean };
   /**
-   * `KOTH_TICK` gates opening anything; `auto` and `vote` are the two ways a row
-   * comes about without an admin (spec 2026-09-24). Both refuse to load without
-   * `KOTH_TICK`: a row they create would be decided and never opened.
-   */
-  koth: { enabled: boolean; auto: { enabled: boolean; weeklyCap: number; minPop: number }; vote: { enabled: boolean } };
-  /**
    * Referral qualification always runs (the boards need it); `enabled` gates only
    * the weekly plate carrier payout (`referral-award-tick.ts`).
    */
@@ -183,8 +177,8 @@ export type BotConfig = {
   /** Gates only the weekly weapon kit for the top raiding clan (`raid-award.ts`); runs on the main tick, right after the week close. */
   raidAward: { enabled: boolean };
   /**
-   * Where the raid window, the weekly vehicle wipe, bounties, King of the Hill
-   * and referral payouts announce themselves. Fatal when any gated one is on and
+   * Where the raid window, the weekly vehicle wipe, bounties and
+   * referral payouts announce themselves. Fatal when any gated one is on and
    * this is unset — see the load-time checks below.
    */
   serverEventsChannelId: string | undefined;
@@ -506,15 +500,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     wellAwards: { enabled: ["1", "true"].includes((env.WELL_AWARD_TICK ?? "").trim().toLowerCase()) },
-    koth: {
-      enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()),
-      auto: {
-        enabled: ["1", "true"].includes((env.KOTH_AUTO_TICK ?? "").trim().toLowerCase()),
-        weeklyCap: positiveInt(env, "KOTH_WEEKLY_CAP", 2),
-        minPop: positiveInt(env, "KOTH_AUTO_MIN_POP", 10),
-      },
-      vote: { enabled: ["1", "true"].includes((env.KOTH_VOTE ?? "").trim().toLowerCase()) },
-    },
     raidAward: { enabled: ["1", "true"].includes((env.RAID_AWARD_TICK ?? "").trim().toLowerCase()) },
     referralAward: {
       enabled: ["1", "true"].includes((env.REFERRAL_AWARD_TICK ?? "").trim().toLowerCase()),
@@ -598,23 +583,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.bounties.enabled && !config.serverEventsChannelId) {
     throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
   }
-  // ⚠️ Same failure shape as RAID_WINDOW_TICK: a session only
-  // opens at a restart, so with RESTART_SCHEDULE off nothing would ever apply it.
-  if (config.koth.enabled && !config.restartSchedule) {
-    throw new Error("KOTH_TICK is on but RESTART_SCHEDULE is off — a session only opens at a restart, so nothing would ever apply it.");
-  }
-  // ⚠️ Fatal, like BOUNTY_TICK: an unannounced event is one nobody
-  // comes to, so with no channel to post it this is misconfigured, not merely degraded.
-  if (config.koth.enabled && !config.serverEventsChannelId) {
-    throw new Error("KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — an unannounced event is one nobody comes to.");
-  }
-  if (config.koth.auto.enabled && !config.koth.enabled) {
-    throw new Error("KOTH_AUTO_TICK is on but KOTH_TICK is off — an automatic event would be decided and announced, and never opened.");
-  }
-  if (config.koth.vote.enabled && !config.koth.enabled) {
-    throw new Error("KOTH_VOTE is on but KOTH_TICK is off — a passed vote would announce an event nothing ever opens.");
-  }
-  // ⚠️ Fatal, like KOTH_TICK: the weekly winner is a public announcement,
+  // ⚠️ Fatal, like BOUNTY_TICK: the weekly winner is a public announcement,
   // and with no channel to post it the payout would run silently forever.
   if (config.referralAward.enabled && !config.serverEventsChannelId) {
     throw new Error("REFERRAL_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly winner would never be announced.");

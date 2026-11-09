@@ -361,42 +361,14 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("KOTH_TICK", () => {
-    it("defaults off", () => {
-      expect(loadConfig(OK).koth.enabled).toBe(false);
-    });
-
-    it("KOTH_TICK needs RESTART_SCHEDULE", () => {
-      expect(() => loadConfig({
-        ...OK, KOTH_TICK: "true", SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
-      })).toThrow(/KOTH_TICK is on but RESTART_SCHEDULE/u);
-    });
-
-    it("KOTH_TICK needs SERVER_EVENTS_CHANNEL_ID", () => {
-      expect(() => loadConfig({
-        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: undefined,
-      })).toThrow(/KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
-    });
-
-    it("enables when both requirements are met", () => {
+  // King of the Hill is gone. A production .env that still sets its variables
+  // must load, not refuse: the bot has to start with the old lines in place.
+  describe("retired KOTH_* variables", () => {
+    it("are ignored", () => {
       const cfg = loadConfig({
-        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t",
-        SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
+        ...OK, KOTH_TICK: "true", KOTH_VOTE: "true", KOTH_AUTO_TICK: "true", KOTH_WEEKLY_CAP: "7", KOTH_AUTO_MIN_POP: "6",
       });
-      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: false, weeklyCap: 2, minPop: 10 }, vote: { enabled: false } });
-    });
-
-    const KOTH_ON = { ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: "123456789012345678" };
-
-    it("KOTH_AUTO_TICK needs KOTH_TICK", () => {
-      expect(() => loadConfig({ ...OK, KOTH_AUTO_TICK: "true" })).toThrow(/KOTH_AUTO_TICK is on but KOTH_TICK is off/u);
-    });
-    it("KOTH_VOTE needs KOTH_TICK", () => {
-      expect(() => loadConfig({ ...OK, KOTH_VOTE: "true" })).toThrow(/KOTH_VOTE is on but KOTH_TICK is off/u);
-    });
-    it("reads the automatic trigger's cap and floor", () => {
-      const cfg = loadConfig({ ...KOTH_ON, KOTH_AUTO_TICK: "true", KOTH_WEEKLY_CAP: "3", KOTH_AUTO_MIN_POP: "12", KOTH_VOTE: "1" });
-      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: true, weeklyCap: 3, minPop: 12 }, vote: { enabled: true } });
+      expect(cfg).not.toHaveProperty("koth");
     });
   });
 

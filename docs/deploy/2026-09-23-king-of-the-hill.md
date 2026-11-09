@@ -1,5 +1,7 @@
 # King of the Hill — deploy and operate
 
+> ⚠️ **Superseded.** King of the Hill was removed after v2.21.0 (see CHANGELOG.md and CLAUDE.md's "(History) King of the Hill" row). Nothing in this runbook applies any more; the `koth_*` tables keep their rows. Kept as history.
+
 > **Since 2026-10-07 the server is Chernarus.** Read `livonia` below as `chernarus`: that repo
 > stages `koth/default/{cfgplayerspawnpoints.xml, globals.xml}` and carries the 44
 > `custom/koth-*.json` loadouts since chernarus v1.29.0, and refuses a `koth-` preset in its

@@ -425,54 +425,6 @@ export const BOUNTY_REASON_MAX = 200;
  */
 export const AWARD_REMOVAL_LEAD_MS = 15 * MIN;
 
-// ─── King of the Hill (spec 2026-09-23-king-of-the-hill) ───────────────────
-/** A kill scores if its VICTIM was this close to the hill's centre (2-D). */
-export const KOTH_ZONE_RADIUS_M = 500;
-export const KOTH_REMINDER_LEAD_MS = 30 * 60_000;
-/** How long after the closing restart before scoring, for log lag. */
-export const KOTH_SCORE_SETTLE_MS = 10 * 60_000;
-/** ⚠️ Reserved: the restore arm treats any preset starting with this as KotH's. */
-export const KOTH_PRESET_PREFIX = "koth-";
-/**
- * The db/globals.xml `<var>` values a KotH session runs with: bodies clear fast,
- * and players standing near them no longer hold the cleanup off, so a busy hill
- * does not fill with corpses and loot piles. Spliced in place, never a whole-file
- * copy.
- * ⚠️ There is deliberately no "normal" value here. The restore reads each one from
- * the mission's koth/default/globals.xml (staged from db/globals.xml by the
- * chernarus deploy), so the mission repo stays the only statement of the defaults
- * and a retune there is never reverted by the bot.
- */
-export const KOTH_GLOBALS: Readonly<Record<string, number>> = {
-  CleanupLifetimeDeadPlayer: 30,
-  CleanupLifetimeDeadInfected: 10,
-  CleanupAvoidance: 5,
-};
-
-// ─── KotH automatic trigger and vote (spec 2026-09-24-koth-auto-and-vote) ───
-/** Every KotH, whatever started it, is at least this long after the last one's slot (§2.2). */
-export const KOTH_MIN_GAP_MS = 24 * 60 * 60 * 1000;
-/**
- * The automatic trigger's high-water window (§3). It is also the lockout length,
- * because a record blocks every later slot until it ages out; the lever for how
- * often events fire is `KOTH_AUTO_MIN_POP`, not this.
- */
-export const KOTH_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
-/** How many recent towns the draw excludes (§2.4). */
-export const KOTH_NO_REPEAT = 5;
-/** Players online needed to open a vote (§6.1). */
-export const KOTH_VOTE_MIN_POP = 10;
-/**
- * The turnout floor's minimum, and so the smallest electorate a vote may open with.
- * ⚠️ Mirrored as a literal in `koth_votes_electorate_min`; koth-vote-drift.test.ts.
- */
-export const KOTH_VOTE_TURNOUT_MIN = 5;
-/** Two-thirds, as integers — `yes * DEN >= cast * NUM`, never a float 0.666…. */
-export const KOTH_VOTE_PASS_NUM = 2;
-export const KOTH_VOTE_PASS_DEN = 3;
-/** The shortest a vote may be open before it closes (§4). */
-export const KOTH_VOTE_MIN_OPEN_MS = 10 * 60_000;
-
 // ─── Referral leaderboards (spec 2026-09-27-referral-leaderboard) ──────────
 /** Referral leaderboards (spec 2026-09-27-referral-leaderboard §2, §3). */
 /** Play a referred player needs before their referral counts. Total play, including play before they were named. */

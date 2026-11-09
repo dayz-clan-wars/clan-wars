@@ -1,5 +1,7 @@
 # King of the Hill: automatic trigger and player vote — deploy
 
+> ⚠️ **Superseded.** King of the Hill was removed after v2.21.0 (see CHANGELOG.md and CLAUDE.md's "(History) King of the Hill" row). Nothing in this runbook applies any more; the `koth_*` tables keep their rows. Kept as history.
+
 Spec: `docs/superpowers/specs/2026-09-24-koth-auto-and-vote-design.md`
 
 ## What changes on the server

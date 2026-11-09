@@ -25,7 +25,7 @@ function ctx(over: Partial<StoryContext> = {}): StoryContext {
     week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
     clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] },
-    bounties: [], koth: [], airdrops: [], previous: null,
+    bounties: [], airdrops: [], previous: null,
     ...over,
   };
 }

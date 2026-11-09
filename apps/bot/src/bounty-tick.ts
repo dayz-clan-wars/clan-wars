@@ -109,7 +109,7 @@ export async function payBountyAwards(db: Database, opts: { now: Date; siteBaseU
         .where(eq(identityLinks.dayzId, b.claimedByDayzId!)).for("share");
       if (!link) return false;
       // ⚠️ A prize that left the catalogue after placement is recorded, never
-      // thrown: grantAwardTx would refuse it every tick forever. KotH's rule.
+      // thrown: grantAwardTx would refuse it every tick forever.
       if (!awardsCatalogue()[b.awardKey]) {
         const failure = `award "${b.awardKey}" is no longer in awards.json; grant it by hand with /award grant`;
         await tx.update(bounties).set({ awardFailure: failure }).where(eq(bounties.id, b.id));
