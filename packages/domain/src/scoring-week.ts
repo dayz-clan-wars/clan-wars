@@ -6,7 +6,7 @@ const SUNDAY = 0;
 
 /**
  * The scoring week containing `d`. Before the cutover that is the old Monday 00:00 UTC week, so every week_start already stored keeps its key.
- * From the cutover on it is the latest Sunday 14:00 UTC at or before `d`, which is when the raid window closes.
+ * From the cutover on it is the latest Sunday 14:00 UTC at or before `d` (where the old weekend raid window closed; raiding is now 24/7).
  */
 export function scoringWeekStartOf(d: Date): Date {
   if (d.getTime() < SCORING_WEEK_CUTOVER.getTime()) return weekStartOf(d);

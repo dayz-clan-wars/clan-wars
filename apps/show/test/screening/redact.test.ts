@@ -19,7 +19,7 @@ function world() {
     raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [{ gamertag: t.gamertag("EvilTag"), clan: bad, value: 3 }, { gamertag: t.gamertag("Nice"), clan: null, value: 1 }], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] },
     bounties: [{ target: t.gamertag("Nice"), reason: t.bountyReason("a slur"), placedAt: "x", placedWhen: "Monday 12:00 am UTC", status: "open", claimer: null, hoursToClaim: null, claimMetres: null }],
-    koth: [], airdrops: [],
+    airdrops: [],
     previous: { title: "Last", storylines: [{ title: "EvilTag strikes", players: [t.gamertag("EvilTag")], clans: ["BN"], status: "EvilTag and Nice fought", openQuestions: [] }] },
   };
   return { t, context };

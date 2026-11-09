@@ -57,7 +57,6 @@ export type BountyStory = {
   claimMetres: number | null;
 };
 
-export type KothStory = { location: string; at: string; when: string; winner: string | null; top: { gamertag: string; kills: number }[] };
 export type AirdropStory = { location: string; at: string; when: string; state: string };
 
 export type Storyline = { title: string; players: string[]; clans: string[]; status: string; openQuestions: string[] };
@@ -73,7 +72,6 @@ export type StoryContext = {
   clanBeefs: ClanVsClan[];
   players: { topKillers: PlayerLine[]; mostDeaths: PlayerLine[]; raidsByPlayer: PlayerLine[]; longestShots: ShotLine[]; oddDeaths: OddDeath[] };
   bounties: BountyStory[];
-  koth: KothStory[];
   airdrops: AirdropStory[];
   previous: PreviousEpisode | null;
 };

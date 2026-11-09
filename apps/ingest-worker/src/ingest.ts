@@ -193,8 +193,8 @@ export function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
             water: line.event.water,
             energy: line.event.energy,
             bleedSources: line.event.bleedSources,
-            // ⚠️ Never `pos`, same reason as above. King of the Hill places a credited
-            // ("finished") kill from this — its kills row cites this bare death.
+            // ⚠️ Never `pos`, same reason as above. A credited ("finished") kill's
+            // position comes from this — its kills row cites this bare death.
             victimPos: line.event.victimPos,
           };
     case "hit":

@@ -60,10 +60,6 @@ export function collectNames(ctx: StoryContext): { names: string[]; aliases: str
     add(b.target);
     add(b.claimer);
   }
-  for (const k of ctx.koth) {
-    add(k.winner);
-    for (const t of k.top) add(t.gamertag);
-  }
   for (const s of ctx.previous?.storylines ?? []) {
     for (const p of s.players) add(p);
     for (const c of s.clans) add(c);

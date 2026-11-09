@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Raiding is on around the clock. Bases can be damaged at any time, not just on weekends. The raid window countdown is gone from the site, and the guide is updated.
+
+### Removed
+
+- The one-hour link requirement. Unlinked players are no longer banned, and anyone banned for it has been unbanned. Linking is still how you join a clan, declare a base and use the site.
+- King of the Hill. Events, `/koth` and `/kothvote` are gone. Past results and any prizes already won stay.
+
 ## [2.21.0] - 2026-11-09
 
 ### Removed

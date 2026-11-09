@@ -317,41 +317,12 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("RAID_WINDOW_TICK", () => {
-    it("is off by default", () => {
-      expect(loadConfig(OK).raidWindow.enabled).toBe(false);
-    });
-
-    it("⚠️ refuses RAID_WINDOW_TICK without RESTART_SCHEDULE", () => {
-      // Same failure shape as TRUCK_WIPE_EVENTS above: the flip only takes
-      // effect at a restart, so it must ride on RESTART_SCHEDULE.
-      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1" })).toThrow(/RESTART_SCHEDULE/u);
-    });
-
-    it("accepts RAID_WINDOW_TICK with RESTART_SCHEDULE on", () => {
-      const c = loadConfig({
-        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
-      });
-      expect(c.raidWindow.enabled).toBe(true);
-    });
-
-    it("accepts the 'true' spelling, matching every other boolean flag", () => {
-      const c = loadConfig({
-        ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
-      });
-      expect(c.raidWindow.enabled).toBe(true);
-    });
-
-    it("refuses RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
-      // The advance/open/close notices are the player-facing point of this
-      // feature; with no channel to post them to it is misconfigured, not
-      // merely degraded — unlike OPS_CHANNEL_ID, which has a real fallback
-      // (an error-level log line).
-      expect(() => loadConfig({
-        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt", SERVER_EVENTS_CHANNEL_ID: undefined,
-      })).toThrow(/RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
+  // Raiding is 24/7: the bot never flips base damage any more. A production .env
+  // that still sets the old flag must load.
+  describe("retired RAID_WINDOW_TICK", () => {
+    it("is ignored", () => {
+      const cfg = loadConfig({ ...OK, RAID_WINDOW_TICK: "1" });
+      expect(cfg).not.toHaveProperty("raidWindow");
     });
   });
 
@@ -361,42 +332,14 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("KOTH_TICK", () => {
-    it("defaults off", () => {
-      expect(loadConfig(OK).koth.enabled).toBe(false);
-    });
-
-    it("KOTH_TICK needs RESTART_SCHEDULE", () => {
-      expect(() => loadConfig({
-        ...OK, KOTH_TICK: "true", SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
-      })).toThrow(/KOTH_TICK is on but RESTART_SCHEDULE/u);
-    });
-
-    it("KOTH_TICK needs SERVER_EVENTS_CHANNEL_ID", () => {
-      expect(() => loadConfig({
-        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: undefined,
-      })).toThrow(/KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
-    });
-
-    it("enables when both requirements are met", () => {
+  // King of the Hill is gone. A production .env that still sets its variables
+  // must load, not refuse: the bot has to start with the old lines in place.
+  describe("retired KOTH_* variables", () => {
+    it("are ignored", () => {
       const cfg = loadConfig({
-        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t",
-        SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
+        ...OK, KOTH_TICK: "true", KOTH_VOTE: "true", KOTH_AUTO_TICK: "true", KOTH_WEEKLY_CAP: "7", KOTH_AUTO_MIN_POP: "6",
       });
-      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: false, weeklyCap: 2, minPop: 10 }, vote: { enabled: false } });
-    });
-
-    const KOTH_ON = { ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: "123456789012345678" };
-
-    it("KOTH_AUTO_TICK needs KOTH_TICK", () => {
-      expect(() => loadConfig({ ...OK, KOTH_AUTO_TICK: "true" })).toThrow(/KOTH_AUTO_TICK is on but KOTH_TICK is off/u);
-    });
-    it("KOTH_VOTE needs KOTH_TICK", () => {
-      expect(() => loadConfig({ ...OK, KOTH_VOTE: "true" })).toThrow(/KOTH_VOTE is on but KOTH_TICK is off/u);
-    });
-    it("reads the automatic trigger's cap and floor", () => {
-      const cfg = loadConfig({ ...KOTH_ON, KOTH_AUTO_TICK: "true", KOTH_WEEKLY_CAP: "3", KOTH_AUTO_MIN_POP: "12", KOTH_VOTE: "1" });
-      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: true, weeklyCap: 3, minPop: 12 }, vote: { enabled: true } });
+      expect(cfg).not.toHaveProperty("koth");
     });
   });
 
@@ -578,25 +521,10 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("LINK_TO_PLAY", () => {
-    const ON = { ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" };
-    it("unset is off", () => {
-      expect(loadConfig(OK).linkToPlay).toBe("off");
-    });
-    it("reads dry and on (trimmed, any case)", () => {
-      expect(loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "dry" }).linkToPlay).toBe("dry");
-      expect(loadConfig({ ...OK, ...ON, LINK_TO_PLAY: " ON " }).linkToPlay).toBe("on");
-    });
-    it("⚠️ an unknown value refuses to load rather than reading as off", () => {
-      expect(() => loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "bogus" })).toThrow(/LINK_TO_PLAY must be off, dry or on/u);
-      expect(() => loadConfig({ ...OK, ...ON, LINK_TO_PLAY: "true" })).toThrow(/LINK_TO_PLAY must be off, dry or on/u);
-    });
-    it("⚠️ dry or on without ENFORCEMENT_TICK refuses to load", () => {
-      expect(() => loadConfig({ ...OK, LINK_TO_PLAY: "dry" })).toThrow(/LINK_TO_PLAY is dry but ENFORCEMENT_TICK is off/u);
-      expect(() => loadConfig({ ...OK, LINK_TO_PLAY: "on" })).toThrow(/LINK_TO_PLAY is on but ENFORCEMENT_TICK is off/u);
-    });
-    it("off without ENFORCEMENT_TICK loads", () => {
-      expect(loadConfig({ ...OK, LINK_TO_PLAY: "off" }).linkToPlay).toBe("off");
+  // Link to play is gone. A production .env that still sets it must load.
+  describe("retired LINK_TO_PLAY", () => {
+    it("is ignored, whatever its value", () => {
+      for (const v of ["off", "dry", "on", "bogus"]) expect(loadConfig({ ...OK, LINK_TO_PLAY: v })).not.toHaveProperty("linkToPlay");
     });
   });
 

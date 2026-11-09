@@ -87,9 +87,8 @@ export type ViolationKind = (typeof VIOLATION_KINDS)[number];
 export const BAN_STATUSES = ["pending", "applied", "lift_pending", "lifted", "expired", "failed"] as const;
 export type BanStatus = (typeof BAN_STATUSES)[number];
 /**
- * Statuses that mean a ban is in force, queued, or on its way out: the set the
- * link gate reads as "this gamertag has an active ban" and the link page reads
- * before promising a lift. One statement, so the two cannot disagree.
+ * Statuses that mean a ban is in force, queued, or on its way out. (Link-to-play's
+ * gate and link page read it; both are gone.)
  */
 export const BAN_ACTIVE_STATUSES = ["pending", "applied", "lift_pending"] as const satisfies readonly BanStatus[];
 export type BanActiveStatus = (typeof BAN_ACTIVE_STATUSES)[number];

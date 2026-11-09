@@ -383,7 +383,6 @@ describe("structureTick", () => {
       renameChannel: (i, n) => guild.renameChannel(i, n),
       roleMembers: () => { throw new Error("guild not fetched yet"); },
       isMember: () => { throw new Error("guild not fetched yet"); },
-      fetchMemberExists: (u) => guild.fetchMemberExists(u),
       addRole: (u, r) => guild.addRole(u, r),
       removeRole: (u, r) => guild.removeRole(u, r),
       setNickname: (u, n) => guild.setNickname(u, n),

@@ -3,7 +3,7 @@ import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, PREV_MON, at, type Fx } from "../fixture.js";
 import { PlayerTexts } from "../../src/story/registry.js";
 import { weekWindow } from "../../src/weeks.js";
-import { flagEventsForWeek, memberMovesForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "../../src/story/events.js";
+import { flagEventsForWeek, memberMovesForWeek, bountiesForWeek, airdropsForWeek } from "../../src/story/events.js";
 import { loadPreviousEpisode } from "../../src/story/previous.js";
 import { whenLabel } from "../../src/story/sql.js";
 
@@ -59,41 +59,6 @@ describe("events and the previous episode", () => {
       claimer: "TOXIC REAPER680", hoursToClaim: 4.9, claimMetres: 3,
     }]);
     expect(texts.entries().find((e) => e.text === "For funsies")!.kinds).toEqual(["bountyReason"]);
-  });
-
-  it("KotH results name the winner and top killers", async () => {
-    await fx.player("y", "YrJustBad"); await fx.player("c", "CainObennett");
-    await fx.koth({ location: "gliniska", slotAt: at(3, 20), top: [
-      { dayzId: "y", gamertag: "YrJustBad", kills: 77 }, { dayzId: "c", gamertag: "CainObennett", kills: 27 },
-    ] });
-    expect(await kothForWeek(db, read())).toEqual([{
-      location: "Gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "YrJustBad",
-      top: [{ gamertag: "YrJustBad", kills: 77 }, { gamertag: "CainObennett", kills: 27 }],
-    }]);
-  });
-
-  // ⚠️ The script model gets a town name, never a slug: "novaya-petrovka" would
-  // reach Boris and Pavel's lines as written.
-  it("KotH gives the town's display name, Nasdara and retired Chernarus and Livonia alike", async () => {
-    await fx.koth({ location: "novaya-petrovka", slotAt: at(3, 20), top: [] });
-    await fx.koth({ location: "adamow", slotAt: at(4, 20), top: [] });
-    expect((await kothForWeek(db, read())).map((k) => k.location)).toEqual(["Novaya Petrovka", "Adamów"]);
-  });
-
-  // Controller ruling (spec §5.2): the bot froze KotH gamertags as
-  // coalesce(players.gamertag, killer dayz id), so a frozen name can be a raw DayZ id.
-  // Each is named by its CURRENT players row, or UNKNOWN_PLAYER when there is none.
-  it("KotH names an unlinked killer 'an unknown survivor', never the frozen DayZ id", async () => {
-    await fx.player("c", "CainObennett");
-    await fx.koth({ location: "gliniska", slotAt: at(3, 20), top: [
-      { dayzId: "ghost-koth-id", gamertag: "ghost-koth-id", kills: 9 }, { dayzId: "c", gamertag: "OldCainName", kills: 4 },
-    ] });
-    const out = await kothForWeek(db, read());
-    expect(out).toEqual([{
-      location: "Gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "an unknown survivor",
-      top: [{ gamertag: "an unknown survivor", kills: 9 }, { gamertag: "CainObennett", kills: 4 }],
-    }]);
-    expect(JSON.stringify(out)).not.toContain("ghost-koth-id");
   });
 
   it("airdrops in the week only", async () => {

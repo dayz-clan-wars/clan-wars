@@ -1,5 +1,7 @@
 # Link to play — deploy runbook (2026-11-10)
 
+> ⚠️ **Superseded.** Link to play was removed after v2.21.0: it was switched off in production and every open `unlinked` ban lifted first, then the code went. Nothing in this runbook applies any more. Kept as history.
+
 Every gamertag that plays must be linked to a Discord account. An unlinked gamertag gets
 one hour of total play from the launch instant, then an `unlinked` ban. Losing a link
 (leaving the Discord, unlinking) bans at once. Starting a link attempt lifts the ban for

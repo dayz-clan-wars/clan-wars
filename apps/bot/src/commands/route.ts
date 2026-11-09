@@ -8,8 +8,7 @@ import {
   type ModalSubmitInteraction,
 } from "discord.js";
 import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS, UPDATERS } from "./index.js";
-import { parseCustomId, parseVoteButtonId } from "./confirm.js";
-import { castBallot } from "./kothvote.js";
+import { parseCustomId } from "./confirm.js";
 import type { CommandInput, Ctx, Reply } from "./types.js";
 
 /** What an unknown command or a stale client gets: a sentence, never discord.js's default failure. */
@@ -170,15 +169,6 @@ export async function handleComponent(ctx: Ctx, i: MessageComponentInteraction):
   }), `component ${parsed.action}`);
 }
 
-/**
- * A public vote button. ⚠️ No actor check: `cw:v:` ids are pressed by the whole
- * electorate — `castBallot` checks eligibility against `koth_vote_voters`.
- */
-async function handleVoteButton(ctx: Ctx, i: MessageComponentInteraction, v: { voteId: number; yes: boolean }): Promise<void> {
-  await i.deferReply({ flags: MessageFlags.Ephemeral });
-  await finish(i, () => castBallot(ctx, { actorDiscordId: i.user.id, voteId: v.voteId, yes: v.yes }), "koth vote");
-}
-
 export async function handleModalSubmit(ctx: Ctx, i: ModalSubmitInteraction): Promise<void> {
   const parsed = parseCustomId(i.customId);
   if (!parsed || parsed.kind !== "m") return;
@@ -220,8 +210,6 @@ export async function routeInteraction(ctx: Ctx, interaction: Interaction): Prom
     return true;
   }
   if (interaction.isMessageComponent()) {
-    const vote = parseVoteButtonId(interaction.customId);
-    if (vote) { await handleVoteButton(ctx, interaction, vote); return true; }
     const parsed = parseCustomId(interaction.customId);
     if (!parsed || parsed.kind !== "c") return false; // R5: not ours, leave it to discord.ts
     await handleComponent(ctx, interaction);

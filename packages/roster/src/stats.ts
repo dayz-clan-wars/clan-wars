@@ -247,17 +247,6 @@ const inRoster = (col: PgColumn, roster: string[] | null): SQL | undefined =>
 const byAnotherPlayer = sql`${kills.killerDayzId} is not null and ${kills.killerDayzId} <> ${kills.victimDayzId}`;
 
 /**
- * `scoringKill` without the friendly-fire half: by another player, not at the Hub,
- * clanmate or not. King of the Hill's standings alone use it (spec
- * 2026-09-23-king-of-the-hill §2.8, amended 2026-09-29): on the hill everyone is fair
- * game, so a teamkill there counts toward the event.
- * ⚠️ Only the KotH standings. The same kill is still friendly fire on every board,
- * the profile, streaks, achievements and bounties — reaching for this anywhere else
- * reopens exactly what the 2026-09-21 rule below closed.
- */
-export const scoringKillAnyTeam = and(byAnotherPlayer, eq(kills.atHub, false))!;
-
-/**
  * A kill that SCORES: by another player, and not a clanmate.
  *
  * ⚠️ Since 2026-09-21 friendly fire earns and costs nothing anywhere but the
@@ -285,9 +274,7 @@ export const scoringKillAnyTeam = and(byAnotherPlayer, eq(kills.atHub, false))!;
  * package root): a bounty is claimed by exactly this kind of kill, and a respelling
  * would be the fourth copy of a rule that has already drifted three ways.
  */
-// Built on `scoringKillAnyTeam` so the Hub half is stated once for both; this stays
-// the only place the friendly-fire half is.
-export const scoringKill = and(scoringKillAnyTeam, eq(kills.friendlyFire, false))!;
+export const scoringKill = and(byAnotherPlayer, eq(kills.atHub, false), eq(kills.friendlyFire, false))!;
 
 const gamertagOf = (col: PgColumn) => sql<string>`coalesce(${players.gamertag}, ${col})`;
 

@@ -17,27 +17,6 @@ const DAY = 86_400_000;
 export const LINK_EMOTES = 3;
 export const LINK_TTL_MS = 24 * HOUR;
 
-// Link to play: an unlinked gamertag gets this much total play time, then a ban.
-export const LINK_TO_PLAY_GRACE_MS = 60 * MIN;
-// Starting a link attempt lifts the ban for this long...
-export const LINK_TO_PLAY_LIFT_MS = 60 * MIN;
-// ...at most once per this window per gamertag.
-export const LINK_TO_PLAY_LIFT_WINDOW_MS = 24 * HOUR;
-// Most removals the link sweep will make in one pass. More linked users than
-// this looking absent at once halts the pass: that is a bad member read, not
-// "a handful" of real leavers (spec §9).
-export const LINK_SWEEP_MAX_PER_PASS = 5;
-// ⚠️ The sweep runs at most this often (plus once right after the first full
-// member fetch). On the 10 s tick a bad member read lasting a few ticks would
-// otherwise repeat; hourly bounds a bad read to one pass per hour. The live
-// guildMemberRemove event is the fast path; this is only the backstop.
-export const LINK_SWEEP_INTERVAL_MS = 60 * MIN;
-// ⚠️ The launch instant (v2.18.0): the 02:00 UTC restart on 2026-11-07. Fixed, not
-// derived; moving it re-times every grace hour (runbook docs/deploy/2026-11-10-link-to-play.md).
-// Play before this never counts toward the grace hour, and bans before it
-// never count as "hour already spent".
-export const LINK_TO_PLAY_FROM = new Date("2026-11-07T02:00:00Z");
-
 // Founding
 export const FLAG_POOL_SIZE = 33;
 export const CEREMONY_MIN_PARTICIPANTS = 3;
@@ -101,8 +80,6 @@ export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
-/** Fri 14:00 → Sun 14:00 UTC (0 = Sunday). Enforced by the game server's config, not here. */
-export const RAID_WINDOW = { openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 } as const;
 
 // Defending
 export const FLAG_DOWN_MS = 24 * HOUR;
@@ -425,54 +402,6 @@ export const BOUNTY_REASON_MAX = 200;
  */
 export const AWARD_REMOVAL_LEAD_MS = 15 * MIN;
 
-// ─── King of the Hill (spec 2026-09-23-king-of-the-hill) ───────────────────
-/** A kill scores if its VICTIM was this close to the hill's centre (2-D). */
-export const KOTH_ZONE_RADIUS_M = 500;
-export const KOTH_REMINDER_LEAD_MS = 30 * 60_000;
-/** How long after the closing restart before scoring, for log lag. */
-export const KOTH_SCORE_SETTLE_MS = 10 * 60_000;
-/** ⚠️ Reserved: the restore arm treats any preset starting with this as KotH's. */
-export const KOTH_PRESET_PREFIX = "koth-";
-/**
- * The db/globals.xml `<var>` values a KotH session runs with: bodies clear fast,
- * and players standing near them no longer hold the cleanup off, so a busy hill
- * does not fill with corpses and loot piles. Spliced in place, never a whole-file
- * copy.
- * ⚠️ There is deliberately no "normal" value here. The restore reads each one from
- * the mission's koth/default/globals.xml (staged from db/globals.xml by the
- * chernarus deploy), so the mission repo stays the only statement of the defaults
- * and a retune there is never reverted by the bot.
- */
-export const KOTH_GLOBALS: Readonly<Record<string, number>> = {
-  CleanupLifetimeDeadPlayer: 30,
-  CleanupLifetimeDeadInfected: 10,
-  CleanupAvoidance: 5,
-};
-
-// ─── KotH automatic trigger and vote (spec 2026-09-24-koth-auto-and-vote) ───
-/** Every KotH, whatever started it, is at least this long after the last one's slot (§2.2). */
-export const KOTH_MIN_GAP_MS = 24 * 60 * 60 * 1000;
-/**
- * The automatic trigger's high-water window (§3). It is also the lockout length,
- * because a record blocks every later slot until it ages out; the lever for how
- * often events fire is `KOTH_AUTO_MIN_POP`, not this.
- */
-export const KOTH_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
-/** How many recent towns the draw excludes (§2.4). */
-export const KOTH_NO_REPEAT = 5;
-/** Players online needed to open a vote (§6.1). */
-export const KOTH_VOTE_MIN_POP = 10;
-/**
- * The turnout floor's minimum, and so the smallest electorate a vote may open with.
- * ⚠️ Mirrored as a literal in `koth_votes_electorate_min`; koth-vote-drift.test.ts.
- */
-export const KOTH_VOTE_TURNOUT_MIN = 5;
-/** Two-thirds, as integers — `yes * DEN >= cast * NUM`, never a float 0.666…. */
-export const KOTH_VOTE_PASS_NUM = 2;
-export const KOTH_VOTE_PASS_DEN = 3;
-/** The shortest a vote may be open before it closes (§4). */
-export const KOTH_VOTE_MIN_OPEN_MS = 10 * 60_000;
-
 // ─── Referral leaderboards (spec 2026-09-27-referral-leaderboard) ──────────
 /** Referral leaderboards (spec 2026-09-27-referral-leaderboard §2, §3). */
 /** Play a referred player needs before their referral counts. Total play, including play before they were named. */
@@ -509,7 +438,7 @@ export const WELL_RADIUS_M = 5;
 // ─── Scoring week (spec 2026-11-06-raid-value-scoring §3, §6) ────────────────
 
 /**
- * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC, the close of the raid window.
+ * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC (the close of the old weekend raid window; raiding is now 24/7).
  * ⚠️ Fixed, not derived from a season or a clock: an owner decision on 2026-11-06. Moving it re-keys `raids.week_start` and `alpha_weeks.week_start` for weeks already stored.
  */
 export const SCORING_WEEK_CUTOVER = new Date("2026-11-08T14:00:00Z");

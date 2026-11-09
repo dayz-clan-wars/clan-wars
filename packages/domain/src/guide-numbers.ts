@@ -22,7 +22,6 @@ const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
 /** The rules.ts exports the guide may name, by key. Composite rows (ranges, pairs) format themselves below. */
 const SCALARS: Record<string, number> = {
   LINK_EMOTES: R.LINK_EMOTES, LINK_TTL_MS: R.LINK_TTL_MS,
-  LINK_TO_PLAY_GRACE_MS: R.LINK_TO_PLAY_GRACE_MS, LINK_TO_PLAY_LIFT_MS: R.LINK_TO_PLAY_LIFT_MS,
   FLAG_POOL_SIZE: R.FLAG_POOL_SIZE, CEREMONY_MIN_PARTICIPANTS: R.CEREMONY_MIN_PARTICIPANTS, CEREMONY_WINDOW_MS: R.CEREMONY_WINDOW_MS,
   CLAIM_WINDOW_MS: R.CLAIM_WINDOW_MS, ACTIVATION_WINDOW_MS: R.ACTIVATION_WINDOW_MS,
   DECLARATIONS_PER_PLAYER: R.DECLARATIONS_PER_PLAYER, NEW_POLE_GRACE_MS: R.NEW_POLE_GRACE_MS, NEW_POLE_MOVE_WINDOW_MS: R.NEW_POLE_MOVE_WINDOW_MS, PUBLIC_BASE_BOUNTY_POINTS: R.PUBLIC_BASE_BOUNTY_POINTS, RELEASED_POLE_GRACE_MS: R.RELEASED_POLE_GRACE_MS,
@@ -121,7 +120,7 @@ const COMPOSITE: Record<string, string> = {
   FLAG_POOL: `${R.FLAG_POOL_SIZE} (white is neutral)`,
   CLAN_NAME_LENGTH: `${R.CLAN_NAME_LENGTH.min}–${R.CLAN_NAME_LENGTH.max}`,
   CLAN_TAG_LENGTH: `${R.CLAN_TAG_LENGTH.min}–${R.CLAN_TAG_LENGTH.max}`,
-  RAID_WINDOW: "Fri 14:00 → Sun 14:00 UTC",
+  RAID_HOURS: "any time",
   ALPHA_WEEK: "Sun 14:00 → Sun 14:00 UTC",
   SEASON: "wipe to wipe",
   VOTE_THRESHOLD: `${R.VOTE_THRESHOLD.num === 2 && R.VOTE_THRESHOLD.den === 3 ? "⅔" : `${R.VOTE_THRESHOLD.num}/${R.VOTE_THRESHOLD.den}`} of all full members`,
@@ -146,8 +145,6 @@ const row = (group: (typeof GUIDE_GROUPS)[number], label: string, key: string): 
 export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Getting in", "Link: emotes to perform", "LINK_EMOTES_ORDERED"),
   row("Getting in", "Link: time limit", "LINK_TTL_MS"),
-  row("Getting in", "Unlinked gamertag: play time before a ban", "LINK_TO_PLAY_GRACE_MS"),
-  row("Getting in", "Starting a link lifts the ban for", "LINK_TO_PLAY_LIFT_MS"),
   row("Founding", "Flags in the pool", "FLAG_POOL"),
   row("Founding", "Ceremony: linked players required", "CEREMONY_MIN_PARTICIPANTS"),
   row("Founding", "Ceremony: window", "CEREMONY_WINDOW_MS"),
@@ -165,7 +162,7 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Bases", "Watch zone radius", "WATCH_ZONE_RADIUS_M"),
   row("Bases", "Solo declaration lapses after (no raise by declarant)", "SOLO_LAPSE_MS"),
   row("Raiding", "Same clan raiding the same victim counts once per", "RAID_DEDUP_MS"),
-  row("Raiding", "Raid window (base damage on)", "RAID_WINDOW"),
+  row("Raiding", "When bases can be raided", "RAID_HOURS"),
   row("Raiding", "A raid pays: an established clan's starting value", "RAID_VALUE_BASE"),
   row("Raiding", "Added to your value by each raid you land", "RAID_HEAT"),
   row("Raiding", "That bonus fades to nothing over", "RAID_HEAT_FADE_MS"),

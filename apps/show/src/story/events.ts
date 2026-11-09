@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
-import { bunkerRoomName, kothTownName } from "@factions/domain";
+import { bunkerRoomName } from "@factions/domain";
 import type { WeekRead } from "./people.js";
-import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory, MemberMove } from "./types.js";
+import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, MemberMove } from "./types.js";
 import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
 
 const FLAG_KINDS: FlagEventKind[] = ["founded", "activated", "dormant", "revived", "disbanded"];
@@ -79,45 +79,6 @@ export async function bountiesForWeek(db: Database, a: WeekRead): Promise<Bounty
     hoursToClaim: r.hours,
     claimMetres: r.metres,
   }));
-}
-
-type KothRow = { dayzId?: string; gamertag: string; kills: number };
-type KothResultsJson = { top?: KothRow[]; winner?: KothRow | null; topKiller?: KothRow | null } | null;
-
-/**
- * ⚠️ The bot froze each KotH gamertag as `coalesce(players.gamertag, killer dayz id)`,
- * so `results.*.gamertag` can be a raw DayZ id (spec §5.2). Never read it: name each
- * row by its `dayzId`'s CURRENT `players` row, or UNKNOWN_PLAYER when there is none.
- */
-export async function kothForWeek(db: Database, a: WeekRead): Promise<KothStory[]> {
-  const rs = await rows<{ location: string; at: string | Date; results: KothResultsJson | string }>(db, sql`
-    select location, slot_at as at, results from koth_events
-    where server_id = ${a.serverId} and ${between("slot_at", a)} and state in ('awarded', 'finished', 'no_winner')
-    order by slot_at asc`);
-  const parsed = rs.map((r) => ({ r, res: (typeof r.results === "string" ? JSON.parse(r.results) : r.results) as KothResultsJson }));
-  const ids = new Set<string>();
-  for (const { res } of parsed) {
-    for (const k of [res?.winner, res?.topKiller, ...(res?.top ?? []).slice(0, 5)]) if (k?.dayzId) ids.add(k.dayzId);
-  }
-  const names = new Map<string, string>();
-  if (ids.size > 0) {
-    const ps = await rows<{ dayz_id: string; gamertag: string }>(db, sql`
-      select dayz_id, gamertag from players
-      where dayz_id in (${sql.join([...ids].map((id) => sql`${id}`), sql`, `)})`);
-    for (const p of ps) names.set(p.dayz_id, p.gamertag);
-  }
-  const nameOf = (k: KothRow) => a.texts.gamertag((k.dayzId !== undefined ? names.get(k.dayzId) : undefined) ?? UNKNOWN_PLAYER);
-  return parsed.map(({ r, res }) => {
-    const winner = res?.winner ?? res?.topKiller ?? null;
-    return {
-      // ⚠️ The town's name, never its slug: this reaches the script model as written.
-      location: kothTownName(r.location),
-      at: iso(r.at),
-      when: whenLabel(r.at),
-      winner: winner === null ? null : nameOf(winner),
-      top: (res?.top ?? []).slice(0, 5).map((t) => ({ gamertag: nameOf(t), kills: t.kills })),
-    };
-  });
 }
 
 export async function airdropsForWeek(db: Database, a: WeekRead): Promise<AirdropStory[]> {

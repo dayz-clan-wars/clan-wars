@@ -37,7 +37,6 @@ export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim } 
 export type { VaultState, VaultLockView, VaultHistoryRow } from "./api";
 export type { GuestGrantOutcome, GuestTargetRef } from "./api";
 export type { Attention } from "./api";
-export type { BaseDamageWindow } from "./api";
 export type { LiveServer } from "./api";
 export type { LiveRow, LiveQuery, OnlinePlayerRow } from "./api";
 export type { AchievementWall, AchievementTile, AchievementSubject } from "./api";
@@ -48,7 +47,7 @@ export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKi
 export type { AwardSummary, AwardView, AwardWriteOutcome, GiveAwardOutcome } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, cancelRebrand, castVote,
+  acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, cancelRebrand, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, giveAward, grantGuestPass, invite, kick, leave, linkStatus, liveFeed, liveServers, mapState,

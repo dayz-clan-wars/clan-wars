@@ -1,33 +1,13 @@
-import type { BaseDamageWindow } from "@factions/roster";
 import { RESTART_PERIOD_MS, nextRestartAt } from "@factions/domain";
 
 /**
- * The two-column timer bar under the server-name marquee: the raid window on
- * the left, the next scheduled restart on the right. Both columns are a pure
- * function of a window and a clock, so the server can render the first frame
- * and the client can go on ticking from the same arithmetic.
+ * The timer bar under the server-name marquee: the next scheduled restart. A pure
+ * function of a clock, so the server can render the first frame and the client
+ * can go on ticking from the same arithmetic.
+ *
+ * Until raiding went 24/7 (unreleased after v2.21.0) a second column counted the
+ * weekend raid window down; it went with the window.
  */
-
-export type RaidTone = "live" | "muted" | "warn";
-
-export type RaidColumn = {
-  /** "Ends in", "Starts in", "Skipped", "Opening", "Closing". */
-  label: string;
-  /** The countdown, or the words that stand in for one. */
-  value: string;
-  /** A muted aside beside the value — today only a skip's reason. "" when there is none. */
-  detail: string;
-  /**
-   * The instant `value` counts down to, as ISO, or null when the value is not a
-   * clock at all. ⚠️ null is what stops the client ticking a column whose value is
-   * words: a skipped weekend and an unconfirmed flip have nothing to count to, and
-   * a countdown there would invent one.
-   */
-  target: string | null;
-  tone: RaidTone;
-  /** 0–1 of the rule under the column, filling left to right as the window is used up. */
-  fill: number;
-};
 
 export type RestartColumn = {
   /** mm:ss. The minutes field is not bounded by 99 — a period is 120 minutes. */
@@ -48,71 +28,7 @@ export type RestartColumn = {
  */
 export const RESTART_SOON_MS = 10 * 60_000;
 
-/** "14h", "2d 0h", "38m" — coarse on purpose; a raid window is days long and a ticking clock invites reloading. */
-export function humanizeUntil(from: Date, to: Date): string {
-  const ms = Math.max(0, to.getTime() - from.getTime());
-  const mins = Math.floor(ms / 60000);
-  const days = Math.floor(mins / 1440);
-  const hours = Math.floor((mins % 1440) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h`;
-  return `${mins}m`;
-}
-
-/** How far `now` has travelled from `from` to `to`, never off either end of the rule. */
-function span(from: Date, to: Date, now: Date): number {
-  const total = to.getTime() - from.getTime();
-  if (total <= 0) return 0;
-  return Math.min(1, Math.max(0, (now.getTime() - from.getTime()) / total));
-}
-
-/**
- * The left column.
- *
- * ⚠️ `w.boundaryAt` is the last boundary passed — this window's open while it is
- * open, the PREVIOUS close while it is closed — and it is read as given. The rule
- * fills from there to the instant ahead, and re-deriving the midweek case here as
- * "a week before closesAt" is the drift `base-damage-window.ts` has a ⚠️ about.
- */
-export function raidColumn(w: BaseDamageWindow, now: Date): RaidColumn {
-  switch (w.status) {
-    case "live":
-      return {
-        label: "Ends in",
-        value: humanizeUntil(now, w.closesAt),
-        detail: "",
-        target: w.closesAt.toISOString(),
-        tone: "live",
-        fill: span(w.boundaryAt, w.closesAt, now),
-      };
-    case "closed":
-      return {
-        label: "Starts in",
-        value: humanizeUntil(now, w.opensAt),
-        detail: "",
-        target: w.opensAt.toISOString(),
-        tone: "muted",
-        fill: span(w.boundaryAt, w.opensAt, now),
-      };
-    case "skipped":
-      return { label: "Skipped", value: "this week", detail: w.skipReason ?? "", target: null, tone: "muted", fill: 0 };
-    case "unconfirmed":
-      // ⚠️ Never the live styling and never a countdown. The boundary passed with
-      // no confirmed flip, so whether base damage is on is genuinely unknown —
-      // and "Opening" on a missing CLOSE would be the wrong word in the
-      // reassuring direction, which is the direction this bar never takes.
-      return {
-        label: w.pending === "close" ? "Closing" : "Opening",
-        value: "unconfirmed",
-        detail: "",
-        target: null,
-        tone: "warn",
-        fill: 0,
-      };
-  }
-}
-
-/** The right column: mm:ss to `nextAt`, its rule draining as the slot approaches. */
+/** The restart column: mm:ss to `nextAt`, its rule draining as the slot approaches. */
 export function restartColumn(nextAt: Date, now: Date): RestartColumn {
   const left = Math.max(0, nextAt.getTime() - now.getTime());
   const mm = String(Math.floor(left / 60000)).padStart(2, "0");
@@ -124,18 +40,14 @@ export function restartColumn(nextAt: Date, now: Date): RestartColumn {
   };
 }
 
-/** Both columns' first frame, for the map's compact clocks (map/map-timers.tsx). null is a column with nothing to show. */
-export type TimerColumns = { raid: RaidColumn | null; restart: RestartColumn | null };
+/** The restart column's first frame, for the map's compact clock (map/map-timers.tsx). null is nothing to show. */
+export type TimerColumns = { restart: RestartColumn | null };
 
 /**
- * The bar's two columns as plain data, from one clock read — the map renders
- * them in its own bar, client-side, so it is handed the columns rather than
- * the window. Same rules as TimerBar: no window is no raid column, and no
- * scheduled restarts is no restart column, never a confident clock.
+ * The bar's restart column as plain data, from one clock read — the map renders
+ * it in its own bar, client-side. No scheduled restarts is no column, never a
+ * confident clock.
  */
-export function timerColumns(w: BaseDamageWindow | undefined, restartsScheduled: boolean, now: Date): TimerColumns {
-  return {
-    raid: w ? raidColumn(w, now) : null,
-    restart: restartsScheduled ? restartColumn(nextRestartAt(now), now) : null,
-  };
+export function timerColumns(restartsScheduled: boolean, now: Date): TimerColumns {
+  return { restart: restartsScheduled ? restartColumn(nextRestartAt(now), now) : null };
 }

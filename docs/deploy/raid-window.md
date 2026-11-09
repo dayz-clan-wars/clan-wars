@@ -1,5 +1,7 @@
 # The raid window — automated flip and its manual fallback
 
+> ⚠️ **Superseded.** Raiding is 24/7 since after v2.21.0: base damage is always on in the mission's `cfggameplay.json`, and the bot no longer flips it, posts notices or reads skips. Nothing in this runbook applies any more; the `raid_window_*` tables keep their rows. Kept as history.
+
 Base damage is on from **Friday 14:00 UTC** to **Sunday 14:00 UTC** (guide ch. 5 and 13;
 `RAID_WINDOW` in `packages/domain/src/rules.ts`). Since the raid-window-automation
 increment, the bot flips it: `raid-window-tick.ts` runs beside `restart-tick.ts`, on the

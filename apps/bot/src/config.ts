@@ -154,12 +154,6 @@ export type BotConfig = {
   /** Truck wipe. `events` empty means off; the window is only meaningful when it is not. */
   truckWipe: { events: string[]; offHour: number; onHour: number; rotation: boolean };
   /**
-   * Gates the raid-window flip on the restart slots. Off by default, same
-   * reasoning as `achievementsTick`/`truckWipe`: the flip only takes effect
-   * at a restart, so it rides on `restartSchedule` and is refused without it.
-   */
-  raidWindow: { enabled: boolean };
-  /**
    * Gates the bounty tick and its poster (spec 2026-09-23-bounties). `/bounty place`
    * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
    */
@@ -170,12 +164,6 @@ export type BotConfig = {
    */
   wellAwards: { enabled: boolean };
   /**
-   * `KOTH_TICK` gates opening anything; `auto` and `vote` are the two ways a row
-   * comes about without an admin (spec 2026-09-24). Both refuse to load without
-   * `KOTH_TICK`: a row they create would be decided and never opened.
-   */
-  koth: { enabled: boolean; auto: { enabled: boolean; weeklyCap: number; minPop: number }; vote: { enabled: boolean } };
-  /**
    * Referral qualification always runs (the boards need it); `enabled` gates only
    * the weekly plate carrier payout (`referral-award-tick.ts`).
    */
@@ -183,13 +171,13 @@ export type BotConfig = {
   /** Gates only the weekly weapon kit for the top raiding clan (`raid-award.ts`); runs on the main tick, right after the week close. */
   raidAward: { enabled: boolean };
   /**
-   * Where the raid window, the weekly vehicle wipe, bounties, King of the Hill
-   * and referral payouts announce themselves. Fatal when any gated one is on and
+   * Where the weekly vehicle wipe, bounties and referral
+   * payouts announce themselves. Fatal when any gated one is on and
    * this is unset — see the load-time checks below.
    */
   serverEventsChannelId: string | undefined;
   /**
-   * Where the raid-window tick posts its failure alert. Optional, gated like
+   * Where operator alerts post. Optional, gated like
    * `warLogChannelId` — unset means the alert falls back to an error-level
    * log line and nothing else, not a regression.
    */
@@ -211,14 +199,6 @@ export type BotConfig = {
   /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
   enforcementTick: boolean;
   /**
-   * Link to play (spec 2026-11-06): ban gamertags that play unlinked.
-   * `dry` runs the gate and posts "Would …" to ops without writing a row, so
-   * the first pass can be watched without flipping the global `BAN_DRY_RUN`
-   * (whose hazards are in CLAUDE.md). `on` writes `unlinked` ban rows.
-   * ⚠️ BAN_DRY_RUN is false in production, so `on` bans for real at once.
-   */
-  linkToPlay: "off" | "dry" | "on";
-  /**
    * The public #bans channel — enforced bans and unbans, announced. Undefined
    * means it is OFF: `ban_announcements` rows keep queuing (written whether or
    * not this is set) and nothing posts, same degrade-not-refuse shape as
@@ -226,17 +206,6 @@ export type BotConfig = {
    */
   bansChannelId?: string;
 };
-
-/**
- * ⚠️ Anything but off/dry/on refuses to load. A typo like `ON ` or `true`
- * falling back to off would leave the operator believing the gate runs.
- */
-function linkToPlayMode(raw: string | undefined): "off" | "dry" | "on" {
-  const v = (raw ?? "").trim().toLowerCase();
-  if (v === "") return "off";
-  if (v === "off" || v === "dry" || v === "on") return v;
-  throw new Error(`LINK_TO_PLAY must be off, dry or on (got ${JSON.stringify(raw)}).`);
-}
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const v = env[key];
@@ -503,18 +472,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       onHour: wipeHour(env, "TRUCK_WIPE_ON_HOUR", 10),
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
-    raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     wellAwards: { enabled: ["1", "true"].includes((env.WELL_AWARD_TICK ?? "").trim().toLowerCase()) },
-    koth: {
-      enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()),
-      auto: {
-        enabled: ["1", "true"].includes((env.KOTH_AUTO_TICK ?? "").trim().toLowerCase()),
-        weeklyCap: positiveInt(env, "KOTH_WEEKLY_CAP", 2),
-        minPop: positiveInt(env, "KOTH_AUTO_MIN_POP", 10),
-      },
-      vote: { enabled: ["1", "true"].includes((env.KOTH_VOTE ?? "").trim().toLowerCase()) },
-    },
     raidAward: { enabled: ["1", "true"].includes((env.RAID_AWARD_TICK ?? "").trim().toLowerCase()) },
     referralAward: {
       enabled: ["1", "true"].includes((env.REFERRAL_AWARD_TICK ?? "").trim().toLowerCase()),
@@ -534,7 +493,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
-    linkToPlay: linkToPlayMode(env.LINK_TO_PLAY),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
@@ -555,37 +513,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
   }
 
-  // ⚠️ linkGateTick only ever writes `bans` rows — banTick is what applies them
-  // to Nitrado, so without enforcementTick on too, rows would pile up unapplied.
-  // `dry` writes nothing, but it is refused too so that turning it to `on`
-  // later cannot be the first moment the missing tick shows.
-  if (config.linkToPlay !== "off" && !config.enforcementTick) {
-    throw new Error(`LINK_TO_PLAY is ${config.linkToPlay} but ENFORCEMENT_TICK is off — ban rows would be written and never applied.`);
-  }
-
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule
   // neither would ever fire at all — no error, no log, just a wipe that never happens.
   if ((config.truckWipe.events.length > 0 || config.truckWipe.rotation) && !config.restartSchedule) {
     throw new Error("TRUCK_WIPE_EVENTS or WEEKLY_VEHICLE_WIPE is set but RESTART_SCHEDULE is off — both run on the restart slots, so nothing would ever fire them.");
-  }
-  // ⚠️ Same failure shape as the truck wipe's check just above: the flip only
-  // takes effect when the server restarts, and restarts come from the restart
-  // slots. On without RESTART_SCHEDULE would write a file nobody ever reloads —
-  // the silent no-op class this repo refuses to ship.
-  if (config.raidWindow.enabled && !config.restartSchedule) {
-    throw new Error("RAID_WINDOW_TICK is on but RESTART_SCHEDULE is off — the flip only takes effect at a restart, so nothing would ever apply it.");
-  }
-  // ⚠️ Fatal, unlike OPS_CHANNEL_ID below: the ops alert has a real degrade (an
-  // error-level log line, same as WAR_LOG_CHANNEL_ID unset), but the advance/open/
-  // close notices are the player-facing point of this feature — with no channel to
-  // post them to, this is misconfigured, not merely degraded. It also closes a
-  // write-order hazard: gating the tick on `serverEventsPoster` being present instead
-  // would either skip the tick silently (so a refused flip raises no alert either,
-  // since that check also guards the ops path) or, if the gate were dropped, let a
-  // no-op "post" return successfully and have postOnce's post-first-row-second
-  // order write an announcements row claiming the message went out when it did not.
-  if (config.raidWindow.enabled && !config.serverEventsChannelId) {
-    throw new Error("RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
   }
   // ⚠️ Same failure shape: the Sunday vehicle-wipe notice is the only warning a
   // player gets before their vehicle is cleared, so with no channel to post it
@@ -598,23 +529,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.bounties.enabled && !config.serverEventsChannelId) {
     throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
   }
-  // ⚠️ Same failure shape as RAID_WINDOW_TICK: a session only
-  // opens at a restart, so with RESTART_SCHEDULE off nothing would ever apply it.
-  if (config.koth.enabled && !config.restartSchedule) {
-    throw new Error("KOTH_TICK is on but RESTART_SCHEDULE is off — a session only opens at a restart, so nothing would ever apply it.");
-  }
-  // ⚠️ Fatal, like BOUNTY_TICK: an unannounced event is one nobody
-  // comes to, so with no channel to post it this is misconfigured, not merely degraded.
-  if (config.koth.enabled && !config.serverEventsChannelId) {
-    throw new Error("KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — an unannounced event is one nobody comes to.");
-  }
-  if (config.koth.auto.enabled && !config.koth.enabled) {
-    throw new Error("KOTH_AUTO_TICK is on but KOTH_TICK is off — an automatic event would be decided and announced, and never opened.");
-  }
-  if (config.koth.vote.enabled && !config.koth.enabled) {
-    throw new Error("KOTH_VOTE is on but KOTH_TICK is off — a passed vote would announce an event nothing ever opens.");
-  }
-  // ⚠️ Fatal, like KOTH_TICK: the weekly winner is a public announcement,
+  // ⚠️ Fatal, like BOUNTY_TICK: the weekly winner is a public announcement,
   // and with no channel to post it the payout would run silently forever.
   if (config.referralAward.enabled && !config.serverEventsChannelId) {
     throw new Error("REFERRAL_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly winner would never be announced.");

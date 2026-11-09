@@ -4,7 +4,7 @@ import {
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS, LINK_SWEEP_MAX_PER_PASS, LINK_SWEEP_INTERVAL_MS } from "@factions/domain";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore, type ReferralRefusal } from "@factions/verification";
 import { REFERRAL_COPY } from "@factions/copy";
@@ -24,19 +24,13 @@ import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
-import { linkGateTick, linkGateOpsLines } from "./link-gate-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
 import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
-import { raidWindowTick } from "./raid-window-tick.js";
-import { kothTick } from "./koth-tick.js";
 import { referralAwardTick } from "./referral-award-tick.js";
-import { kothVoteTick } from "./koth-vote-tick.js";
-import { kothDecideTick } from "./koth-decide-tick.js";
-import { voteButtons, type KothVoteChannel } from "./koth-vote-channel.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -77,7 +71,6 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { wellAwardTick } from "./well-award-tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
-import { sweepMissedRemovals } from "./guild-sweep.js";
 import { makeRoster } from "@factions/roster";
 import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
 import { acquireInstanceLock } from "./instance-lock.js";
@@ -594,30 +587,6 @@ export function createChannelPoster(
 }
 
 /**
- * The KotH vote's one message. ⚠️ `allowedMentions: { parse: [] }` on post AND
- * edit: the message carries a gamertag, and an edit re-parses mentions.
- */
-export function createKothVoteChannel(client: Client, channelId: string): KothVoteChannel {
-  const fetchChannel = async (id: string) => {
-    const channel = await client.channels.fetch(id);
-    if (!channel?.isSendable() || !channel.isTextBased() || channel.isDMBased()) {
-      throw new Error(`channel ${id} is missing or not sendable by this bot`);
-    }
-    return channel;
-  };
-  return {
-    async post(content, voteId) {
-      const sent = await (await fetchChannel(channelId)).send({ content, components: [voteButtons(voteId)], allowedMentions: { parse: [] } });
-      return { channelId, messageId: sent.id };
-    },
-    async edit(id, messageId, content, voteId) {
-      const msg = await (await fetchChannel(id)).messages.fetch(messageId);
-      await msg.edit({ content, components: voteId === null ? [] : [voteButtons(voteId)], allowedMentions: { parse: [] } });
-    },
-  };
-}
-
-/**
  * `channel` → `client.channels.fetch`; `dm` → `client.users.fetch(id).send`.
  * Neither falls back to the other — a clan_notices row already carries the
  * discord target its writer decided on, and a DM row with closed DMs is
@@ -721,15 +690,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   const bountyPoster = cfg.bounties.enabled && cfg.serverEventsChannelId
     ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
     : null;
-  // ⚠️ A separate poster on the same channel, with mentions off: a KotH post carries a
-  // gamertag and free-text location/reason, and escaping markdown does not stop
-  // Discord parsing a literal @everyone. See createChannelPoster's comment.
-  const kothPoster = cfg.koth.enabled && cfg.serverEventsChannelId
-    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
-    : null;
-  // ⚠️ Built whenever the channel exists, not only with KOTH_VOTE on: a vote open
-  // when the flag goes off must still be closed and its message edited.
-  const kothVoteChannel = cfg.koth.enabled && cfg.serverEventsChannelId ? createKothVoteChannel(client, cfg.serverEventsChannelId) : null;
   // ⚠️ A separate poster on the same channel, with mentions off: the winners post
   // carries a gamertag. See createChannelPoster's comment.
   const referralPoster = cfg.referralAward.enabled && cfg.serverEventsChannelId
@@ -744,8 +704,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db,
     bountiesEnabled: cfg.bounties.enabled,
-    koth: kothPoster,
-    kothVote: kothVoteChannel ? { enabled: cfg.koth.vote.enabled, channel: kothVoteChannel } : null,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
@@ -971,49 +929,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   // queues above, "the row currently reported blocked" is per server, not a
   // single scalar.
   const lastReportedBanAnnounceBlockedAt = new Map<number, number | null>();
-  // `LINK_TO_PLAY=dry` writes nothing, so every pass finds the same gamertags;
-  // this keeps ops to one line per server and dayz id per process.
-  const linkGateDryReported = new Set<string>();
-  // Link to play (spec 2026-11-06 §3), run per server just BEFORE banTick:
-  // it writes the rows banTick applies, so afterwards would delay every new
-  // ban a whole cycle. ⚠️ Its own try/catch: a failure here must never stop the ban tick for
-  // this server or any other.
-  const runLinkGate = async (serverId: number, now: Date): Promise<void> => {
-    try {
-      const dry = cfg.linkToPlay === "dry";
-      const r = await linkGateTick(db, { serverId, now, write: !dry });
-      // Same null-poster fallback the old PC gate used: with no OPS_CHANNEL_ID
-      // a ban still happens and must show somewhere.
-      const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-      for (const line of linkGateOpsLines(r, dry)) {
-        // ⚠️ A dry pass writes nothing, so the same gamertag comes back every
-        // five minutes; report each one once per process.
-        if (dry) {
-          const key = `${serverId}:${line.dayzId}`;
-          if (linkGateDryReported.has(key)) continue;
-          linkGateDryReported.add(key);
-        }
-        // ⚠️ Each post isolated: the rows are already committed and banTick
-        // applies them this pass, so one failed post must not swallow the
-        // rest. Nothing retries them, so fall back to the log.
-        try {
-          await ops(line.content);
-        } catch (err) {
-          console.error(`link gate: ops post failed, the change still stands: ${line.content}`, err);
-        }
-      }
-    } catch (err) {
-      console.error(`link gate tick failed for server ${serverId}`, err);
-    }
-  };
-
   // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
   // tick — see the throttle beside expirePendingMembers below.
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
-  // Link sweep throttle and capped-episode flag (alert once per episode).
-  let lastSweepAt = 0;
-  let sweepCapped = false;
 
   // The leaderboards channel's ten standing messages, on the same clock as
   // the crowns below — both read the same ten boards.
@@ -1195,40 +1114,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       await runStructure("tick");
     } catch (err) {
       console.error("structure tick failed", err);
-    }
-
-    // ⚠️ Spec §9 (reverses ruling 10): links whose Discord user left while the
-    // bot was down. `membersFetched` is load-bearing — a cold member cache
-    // reads as "everyone left" — and each candidate is confirmed by a REST
-    // member fetch before removal. Hourly (plus once right after the first full
-    // fetch, since lastSweepAt starts at 0) so a bad read cannot repeat every
-    // tick. Its own try/catch. ⚠️ Only with LINK_TO_PLAY=on: its removals are
-    // real and irreversible, so `dry` (which must touch nothing) leaves it off.
-    if (cfg.linkToPlay === "on" && membersFetched && Date.now() - lastSweepAt >= LINK_SWEEP_INTERVAL_MS) {
-      try {
-        const sw = await sweepMissedRemovals(db, {
-          ready: membersFetched,
-          isMember: (id) => guildGateway.isMember(id),
-          memberExists: (id) => guildGateway.fetchMemberExists(id),
-          now: new Date(),
-          max: LINK_SWEEP_MAX_PER_PASS,
-        });
-        lastSweepAt = Date.now();
-        const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        if (sw.removed.length > 0) {
-          await ops(`Link sweep: removed ${sw.removed.length} linked user(s) who had left the Discord: ${sw.removed.map((r) => `${r.gamertag} (<@${r.discordId}>)`).join(", ")}`);
-        }
-        if (sw.capped && !sweepCapped) {
-          // Error level on purpose, once per episode: this many missing at
-          // once is more likely a bad member read than a real exodus.
-          const msg = `Link sweep halted: ${sw.missing} linked users look absent from the Discord, over the cap of ${LINK_SWEEP_MAX_PER_PASS}. A bad member read is the likely cause; nobody was removed.`;
-          console.error(msg);
-          await ops(msg);
-        }
-        sweepCapped = sw.capped;
-      } catch (err) {
-        console.error("link sweep failed", err);
-      }
     }
 
     // ⚠️ Its own try/catch, right after structure and on its own throttle: the
@@ -1578,8 +1463,6 @@ export async function start(cfg: BotConfig): Promise<void> {
           const banNow = new Date();
           const since = new Date(banNow.getTime() - BAN_APPLY_LOOKBACK_MS);
           for (const s of banServers) {
-            // ⚠️ Before banTick, see runLinkGate.
-            if (cfg.linkToPlay !== "off") await runLinkGate(s.id, banNow);
 
             try {
               const b = await banTick(db, nitradoFor(s.serviceId!), { now: banNow, dryRun: cfg.banDryRun, since, serverId: s.id });
@@ -1860,66 +1743,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, koth: { open: cfg.koth.enabled } });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
-      }
-    }
-
-    // ⚠️ After the restart tick, same reason the announce tick is: a slow Discord
-    // call must not delay a due restart. Its own try/catch, like every step.
-    // ⚠️ Gated on the flag alone, not `&& serverEventsPoster` — config load refuses
-    // RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is
-    // guaranteed non-null here. Gating on it too would make a refused flip's
-    // alert disappear along with the tick whenever the channel is unset — exactly
-    // the silent-alert-loss this feature must not have.
-    if (cfg.raidWindow.enabled) {
-      try {
-        // ⚠️ Gated like WAR_LOG_CHANNEL_ID: an unset OPS_CHANNEL_ID falls back to
-        // logging the failure alert at error level and nothing else — that is how
-        // the rest of this codebase degrades, not a regression.
-        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        // ⚠️ Non-null by construction: config load throws if RAID_WINDOW_TICK is on
-        // without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster was built above.
-        const r = await raidWindowTick(db, { announce: serverEventsPoster!, ops: opsPoster }, { now: new Date() });
-        if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
-      } catch (err) {
-        console.error("raid window tick failed", err);
-      }
-    }
-
-    // ⚠️ Vote tick → automatic decision, in that order (tick-order.test.ts): a vote
-    // closing at T−30 inserts its row before the decision looks. Each its own
-    // try/catch: a throw in one must leave the other deciding as normal.
-    if (kothVoteChannel) {
-      try {
-        const v = await kothVoteTick(db, kothVoteChannel, kothPoster!, { now: new Date(), enabled: cfg.koth.vote.enabled });
-        if (v.closed + v.posted > 0) console.log(`kothvote: ${v.closed} closed, ${v.posted} posted`);
-      } catch (err) {
-        console.error("koth vote tick failed", err);
-      }
-    }
-    if (cfg.koth.auto.enabled) {
-      try {
-        const d = await kothDecideTick(db, kothPoster!, { now: new Date(), weeklyCap: cfg.koth.auto.weeklyCap, minPop: cfg.koth.auto.minPop });
-        if (d.decided + d.posted > 0) console.log(`koth: ${d.decided} decided automatically, ${d.posted} posted`);
-      } catch (err) {
-        console.error("koth decision tick failed", err);
-      }
-    }
-
-    // ⚠️ AFTER the restart tick, like every server-events poster: a slow Discord
-    // call must never delay a due restart. Its own try/catch.
-    // ⚠️ Gated on the flag alone — config load refuses KOTH_TICK without
-    // SERVER_EVENTS_CHANNEL_ID, so kothPoster is non-null here.
-    if (cfg.koth.enabled) {
-      try {
-        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        const k = await kothTick(db, { announce: kothPoster!, ops: opsPoster }, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
-        if (k.posted + k.failed + k.scored > 0) console.log(`koth: ${k.posted} posted, ${k.failed} failed, ${k.scored} scored`);
-      } catch (err) {
-        console.error("koth tick failed", err);
       }
     }
 
@@ -2011,14 +1838,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
     else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}; fixed: ${FIXED_WEEKLY_WIPES.map((w) => `${w.name} (UTC day ${w.utcDay})`).join(", ")}`);
 
-    if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
-    else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
-
-    if (cfg.koth.enabled) console.log("king of the hill on");
-    else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");
-    if (cfg.koth.auto.enabled) console.log(`king of the hill automation on (cap ${cfg.koth.auto.weeklyCap}/week, floor ${cfg.koth.auto.minPop})`);
-    if (cfg.koth.vote.enabled) console.log("king of the hill voting on");
-
     if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
     if (!cfg.raidAward.enabled) console.warn("RAID_AWARD_TICK is off: weeks still close, but the top raiding clan gets no weapon kit.");
     else console.log("raid award on: the top raiding clan's weekly weapon kit is granted and announced");
@@ -2052,9 +1871,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.log("public ban announcements on: #bans");
     }
 
-    if (cfg.linkToPlay === "off") console.warn("LINK_TO_PLAY is off: unlinked gamertags are not being banned.");
-    else if (cfg.linkToPlay === "dry") console.log("LINK_TO_PLAY dry: the link gate posts what it would do to ops and writes nothing.");
-    else console.log("LINK_TO_PLAY on: unlinked gamertags are banned after their grace hour (one lift a day on starting to link).");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

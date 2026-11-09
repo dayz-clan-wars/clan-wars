@@ -266,8 +266,13 @@ export const identityLinks = pgTable("identity_links", {
 
 /**
  * Every identity link that ended, by any path (unlink, guild removal, a
- * pending-challenge cleanup, a hand delete). Link-to-play bans a lost link at
- * once, and the ban gate needs to know a link existed and went away.
+ * pending-challenge cleanup, a hand delete). Link-to-play read it to ban a lost
+ * link at once.
+ *
+ * ⚠️ History: link-to-play is gone (unreleased after v2.21.0) and nothing reads
+ * this table any more. The trigger still writes it on every link delete; it and
+ * the table stay, because dropping them would need a migration. Drop both in one
+ * on purpose if ever wanted.
  *
  * ⚠️ Written ONLY by the AFTER DELETE trigger `identity_link_ends_record` on
  * `identity_links` (migration 0074), never by application code: three code
@@ -1972,6 +1977,13 @@ export const releaseAnnouncements = pgTable("release_announcements", {
 }));
 
 /**
+ * ⚠️ History: raiding is 24/7 (unreleased after v2.21.0). Base damage is always on in
+ * the mission's cfggameplay.json and the bot never flips it, so nothing writes
+ * `raid_window_flips`, `raid_window_skips` or `raid_window_announcements` any more,
+ * and nothing reads them. The rows stay; drop the tables in a migration only on
+ * purpose. The notes below describe how they were written.
+ */
+/**
  * One row per raid-window boundary actually brought into effect, per server.
  *
  * ⚠️ `boundary_at` is the WINDOW BOUNDARY, not the restart slot. A repair write at
@@ -2225,8 +2237,9 @@ export const bans = pgTable("bans", {
   status: text("status").$type<BanStatus>().notNull().default("pending"),
   /**
    * ⚠️ Defaults to `'zone'` so the rows that existed before the PC gate keep
-   * their meaning. `unlinked` rows (link-to-play) are lifted by starting a
-   * link; `unlinked_pc` was the retired PC gate's and is never lifted that way.
+   * their meaning. `unlinked` rows were link-to-play's (removed after v2.21.0;
+   * every open one was lifted) and `unlinked_pc` the retired PC gate's. Both stay
+   * valid reasons so old rows still read and render.
    */
   reason: text("reason").$type<BanReason>().notNull().default("zone"),
   /**
@@ -2479,6 +2492,11 @@ export type KothResults = { top: KothResultRow[]; topKiller: KothResultRow | nul
 /**
  * One King of the Hill session (spec 2026-09-23-king-of-the-hill).
  *
+ * ⚠️ History: King of the Hill is gone (unreleased after v2.21.0) and nothing
+ * writes this table, `koth_votes` or `koth_vote_voters` any more. They stay, with
+ * their rows, as the record of past events; awards they granted live on in
+ * `award_grants`. The notes below describe how the rows were written.
+ *
  * ⚠️ The two snapshots are what the restore puts back, never a hard-coded
  * default: a user's later edit to the loadout list or to an Infected event must
  * survive (spec §2.5). Each is written only from a file holding no KotH state.
@@ -2582,7 +2600,7 @@ export const kothVotes = pgTable("koth_votes", {
   stateValid: check("koth_votes_state_valid", sql`${t.state} IN ('open','passed','failed','void')`),
   closedIffNotOpen: check("koth_votes_closed_iff_not_open", sql`(${t.state} = 'open') = (${t.closedAt} IS NULL)`),
   passedHasEvent: check("koth_votes_passed_has_event", sql`${t.state} <> 'passed' OR ${t.kothEventId} IS NOT NULL`),
-  // ⚠️ A literal copy of KOTH_VOTE_TURNOUT_MIN — koth-vote-drift.test.ts.
+  // Was a literal copy of rules.ts's KOTH_VOTE_TURNOUT_MIN (removed with King of the Hill).
   electorateMin: check("koth_votes_electorate_min", sql`${t.electorateSize} >= 5`),
   oneOpen: uniqueIndex("koth_votes_one_open").on(t.serverId).where(sql`${t.state} = 'open'`),
   oneSlot: uniqueIndex("koth_votes_slot_uq").on(t.serverId, t.slotAt),

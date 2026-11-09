@@ -1,6 +1,6 @@
 // Builds public/map-data/nasdara/items.json: every types.xml entry, with every way it can
-// reach the world on our server. Run by hand after a mission change (or a catalogue, kit or
-// KotH change in this repo), then commit the output:
+// reach the world on our server. Run by hand after a mission change (or a catalogue or kit
+// change in this repo), then commit the output:
 //
 //   pnpm --filter @factions/web map:items                  # ../nasdara beside this repo
 //   pnpm --filter @factions/web map:items --mission <dir>
@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLAIMABLE_FLAGS, KIT_SLOTS, KOTH_PRESET_FILES, WORLD_MAP, armbandFor } from "@factions/domain";
+import { CLAIMABLE_FLAGS, KIT_SLOTS, WORLD_MAP, armbandFor } from "@factions/domain";
 import { boosterCatalogue } from "@factions/domain/catalogue";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { parseLimits } from "../lib/area-flags";
@@ -38,9 +38,7 @@ const read = (f: string) => readFileSync(join(mission, f), "utf8");
 const limits = parseLimits(read("cfglimitsdefinition.xml"));
 const items = parseTypes(read("db/types.xml"), limits);
 
-// Spawn gear: exactly the files cfggameplay.json lists. ⚠️ Not the koth- presets, even though
-// they sit in the same folder: the bot adds those to the list only while a KotH session runs
-// (koth-converge.ts), so they are "KotH loadout", not everyday fresh-spawn gear.
+// Spawn gear: exactly the files cfggameplay.json lists.
 const gameplay = JSON.parse(read("cfggameplay.json")) as { PlayerData?: { spawnGearPresetFiles?: string[] } };
 const gearFiles = gameplay.PlayerData?.spawnGearPresetFiles ?? [];
 const spawnGear = new Set(gearFiles.flatMap((f) => parseSpawnGear(read(f))));
@@ -73,9 +71,6 @@ tagAs(
   ),
 );
 
-// KotH: the 44 preset files the bot swaps in, read from the mission like any other preset.
-tagAs("KotH loadout", KOTH_PRESET_FILES.flatMap((f) => parseSpawnGear(read(f))));
-
 // Dispatch proxies only count in buildings that exist: placed by mapgrouppos, or an event's wreck.
 // Events place items two ways: their own <children>, and the cfgeventgroups group a spawn
 // position names (the convoys' wrecks, whose deloot is the crash and convoy loot).
@@ -106,7 +101,7 @@ console.log("nominal > 0", count((i) => i.nominal > 0));
 console.log("deloot", count((i) => i.deloot), "of which nominal > 0", count((i) => i.deloot && i.nominal > 0));
 console.log("attachedTo", count((i) => i.attachedTo.length > 0));
 console.log("spawnGear", count((i) => i.spawnGear), "from", gearFiles.join(", "));
-for (const s of ["supply kit", "booster kit", "award", "KotH loadout"] as const) {
+for (const s of ["supply kit", "booster kit", "award"] as const) {
   console.log("clanWars", s, count((i) => i.clanWars.includes(s)));
 }
 console.log("events", count((i) => i.events.length > 0));

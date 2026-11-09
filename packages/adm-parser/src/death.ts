@@ -6,8 +6,8 @@ export type DeathLine =
   /** `victimPos`/`killerPos`: each from its own identity block — the Hub rule reads them (spec 2026-09-22-hub-combat). */
   | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null; victimPos: Vec3 | null; killerPos: Vec3 | null }
   /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads.
-   * ⚠️ `victimPos`: a credited ("finished") kill's event IS this bare death, so King of the Hill
-   * can place it only from here — without it every credited kill is dropped as unplaced. */
+   * ⚠️ `victimPos`: a credited ("finished") kill's event IS this bare death, so this is the
+   * only place its position comes from (King of the Hill, since removed, placed kills by it). */
   | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null; victimPos: Vec3 | null };
 
 const ID = "[0-9A-F]{40}";

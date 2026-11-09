@@ -13,7 +13,7 @@ import { effectiveUsage, type WorldProto } from "./map-world";
 
 type Limits = ReturnType<typeof parseLimits>;
 
-export type ClanWarsSource = "supply kit" | "booster kit" | "award" | "KotH loadout";
+export type ClanWarsSource = "supply kit" | "booster kit" | "award";
 
 export type ItemIndexEntry = {
   className: string;
@@ -213,8 +213,8 @@ export type ItemSources = {
 
 /**
  * Fold every non-types.xml source into the entries, in place.
- * ⚠️ By lower-cased name: DayZ class names are case-insensitive, and the KotH presets alone
- * spell MK4Optic_black, Mag_CZ550_10rnd and FAL_OeBttstck differently from types.xml. An exact
+ * ⚠️ By lower-cased name: DayZ class names are case-insensitive, and mission files have
+ * spelled MK4Optic_black, Mag_CZ550_10rnd and FAL_OeBttstck differently from types.xml. An exact
  * match would drop those sources and could turn a real item into "does not spawn".
  */
 export function applySources(items: ItemIndexEntry[], s: ItemSources): void {

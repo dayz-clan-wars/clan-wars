@@ -48,6 +48,6 @@ export {
   placeBountyDb, revokeBountyDb, openBountiesDb, searchBountyTargetsDb,
   type PlaceBountyOutcome, type OpenBounty,
 } from "./bounty-admin";
-export { scoringKill, scoringKillAnyTeam } from "../stats";
+export { scoringKill } from "../stats";
 // The builders-board predicate, reused by the bot's achievement rules (ruin repairs earn nothing).
 export { isBaseBuild, isRuinRepair } from "../stats";

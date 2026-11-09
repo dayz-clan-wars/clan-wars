@@ -21,9 +21,9 @@ export type RemoveFromGuild = (db: Database, a: { discordId: string; at: Date })
  * store, which is the one roster write a gateway event (not the log, a
  * clock, or the site) is allowed to start (§5.4).
  *
- * ⚠️ ONE retry on a Postgres deadlock (`40P01`), and only that code. The
- * hourly sweep (guild-sweep.ts) is the backstop for a dropped removal, so the
- * retry just avoids waiting an hour. A deadlock aborts only the losing
+ * ⚠️ ONE retry on a Postgres deadlock (`40P01`), and only that code. There is
+ * no backstop for a dropped removal (the hourly guild sweep went with
+ * link-to-play), so the retry matters. A deadlock aborts only the losing
  * transaction and leaves the database untouched, so the whole store call is
  * safe to replay — it is idempotent by the link either way. Anything else is
  * rethrown: a bug should be loud, not retried.
